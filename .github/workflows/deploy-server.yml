@@ -1,0 +1,30 @@
+name: Deploy Server
+
+on:
+  push:
+    paths:
+      - 'software/src/server/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+      - name: Deploy via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
+            cd ~/app
+            git pull origin main
+            docker stop server_container || true
+            docker rm server_container || true
+            docker build -t myserver:latest software/src/server/
+            docker run -d --name server_container -p 8080:8080 myserver:latest
+          "
