@@ -1,31 +1,41 @@
 plugins {
-	id 'java'
-	id 'org.springframework.boot' version '3.5.7'
-	id 'io.spring.dependency-management' version '1.1.7'
+    id 'java'
+    id 'org.springframework.boot' version '3.5.7'
+    id 'io.spring.dependency-management' version '1.1.7'
 }
 
-group = 'com.example'
-version = '0.0.1-SNAPSHOT'
-description = 'SDP Server'
+group = 'org.springframework.guides'   // matches the parent groupId in your pom
+version = '0.0.1-SNAPSHOT'             // matches pom version
+description = 'links'                  // artifactId in the pom
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(25)
-	}
+    toolchain {
+        // Use Java 17 for compilation & runtime — stable for Spring Boot 3.x
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
 
 repositories {
-	mavenCentral()
+    mavenCentral()
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	runtimeOnly 'com.h2database:h2'
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-hateoas'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+
+    // runtime only (H2 in-memory DB)
+    runtimeOnly 'com.h2database:h2'
+
+    // testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // junit-platform-launcher is usually not required explicitly when using spring-boot-starter-test,
+    // but if you need it for a test runner in some CI, you can add:
+    // testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+    useJUnitPlatform()
 }
