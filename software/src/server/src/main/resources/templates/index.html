@@ -2,58 +2,57 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="utf-8"/>
-    <title>Employees — Payroll</title>
+    <title>RFID Events — Dashboard</title>
     <style>
         body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:20px;background:#f6f8fb}
-        .wrap{max-width:900px;margin:0 auto}
-        form{display:flex;gap:8px;margin-bottom:12px}
-        input{padding:8px;border:1px solid #ddd;border-radius:4px}
-        button{padding:8px 12px;background:#2563eb;color:#fff;border:0;border-radius:6px}
-        table{width:100%;border-collapse:collapse;background:#fff;border-radius:6px;overflow:hidden}
-        th,td{padding:10px;border-bottom:1px solid #eee;text-align:left}
-        .muted{color:#666;font-size:0.9rem}
-        .actions form{display:inline}
+        .wrap{max-width:1200px;margin:0 auto}
+        h1{color:#1f2937;margin-bottom:10px}
+        .count{color:#6b7280;font-size:0.95rem;margin-bottom:25px}
+        table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+        th,td{padding:12px;border-bottom:1px solid #eee;text-align:left}
+        th{background:#f9fafb;font-weight:600;color:#374151}
+        .muted{color:#9ca3af;font-size:0.9rem}
+        .enter{color:#16a34a;font-weight:600}
+        .leave{color:#dc2626;font-weight:600}
+        .epc{font-family:monospace;font-size:0.85rem;color:#4b5563}
+        tr:hover{background:#f9fafb}
     </style>
 </head>
 <body>
 <div class="wrap">
-    <h1>Employees</h1>
+    <h1>📡 RFID Event Monitor</h1>
+    <p class="count">Total Events: <strong th:text="${#lists.size(events)}">0</strong></p>
 
-    <section>
-        <h2>Add employee</h2>
-        <form th:action="@{/employees}" th:object="${employeeForm}" method="post">
-            <!-- Render CSRF only if present (works without Spring Security too) -->
-            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
-            <input type="text" th:field="*{name}" placeholder="Name" required />
-            <input type="text" th:field="*{role}" placeholder="Role" required />
-            <button type="submit">Create</button>
-        </form>
-    </section>
-
-    <section>
-        <h2>All employees</h2>
-        <table>
-            <thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Actions</th></tr></thead>
-            <tbody>
-            <tr th:each="emp : ${employees}">
-                <td th:text="${emp.id}">1</td>
-                <td th:text="${emp.name}">Name</td>
-                <td th:text="${emp.role}">Role</td>
-                <td class="actions">
-                    <a th:href="@{|/employees/${emp.id}|}">View</a>
-                    <!-- Delete via POST form; CSRF included only if present -->
-                    <form th:action="@{|/employees/${emp.id}/delete|}" method="post" style="display:inline">
-                        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
-                        <button type="submit">Delete</button>
-                    </form>
-                </td>
-            </tr>
-            <tr th:if="${employees == null or #lists.isEmpty(employees)}">
-                <td colspan="4" class="muted">No employees</td>
-            </tr>
-            </tbody>
-        </table>
-    </section>
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Timestamp</th>
+            <th>Event Type</th>
+            <th>EPC</th>
+            <th>RSSI</th>
+            <th>Antenna</th>
+            <th>User Memory</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="event : ${events}">
+            <td th:text="${event.id()}">1</td>
+            <td th:text="${event.timestamp()}">2025-11-17...</td>
+            <td th:class="${event.eventType() == 'ENTER' ? 'enter' : 'leave'}"
+                th:text="${event.eventType()}">ENTER</td>
+            <td class="epc" th:text="${event.epc()}">DEADBEEF...</td>
+            <td th:text="${event.rssi() != null ? event.rssi() + ' dBm' : '-'}">-57 dBm</td>
+            <td th:text="${event.antennaId() != null ? event.antennaId() : '-'}">1</td>
+            <td class="epc" th:text="${event.userMemory() != null ? event.userMemory() : '-'}">0000...</td>
+        </tr>
+        <tr th:if="${#lists.isEmpty(events)}">
+            <td colspan="7" class="muted" style="text-align:center;padding:30px">
+                No events recorded yet. Waiting for Pi data...
+            </td>
+        </tr>
+        </tbody>
+    </table>
 </div>
 </body>
 </html>

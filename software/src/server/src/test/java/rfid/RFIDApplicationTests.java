@@ -1,10 +1,10 @@
-package Payroll;
+package rfid;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class PayrollApplicationTests {
+class RFIDApplicationTests {
 
 	@Test
 	void contextLoads() {
