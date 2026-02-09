@@ -36,17 +36,17 @@ class Program
         {
             // ---- INITIALIZE LOGGER ----
             // Option 1: Log to file only
-            _logger = new RFIDEventLogger("rfid_events.json");
+            //_logger = new RFIDEventLogger("rfid_events.json");
             
             // Option 2: Log to file AND send to Pico via serial
-            // _logger = new RFIDEventLogger("rfid_events.json", "COM3", 115200);
+            _logger = new RFIDEventLogger("rfid_events.json", "com5", 115200);
             
-            Console.WriteLine("📝 Logger initialized");
+            Console.WriteLine("Logger initialized");
 
             // ---- RFID READER SETUP ----
-            _r = Reader.Create("tmr:///com8");   // change COM if needed
+            _r = Reader.Create("tmr:///com7");   // change COM if needed
             _r.Connect();
-            Console.WriteLine("✅ Connected to RFID Reader");
+            Console.WriteLine("Connected to RFID Reader");
 
             // ---- REGION SETUP ----
             Reader.Region currentRegion = (Reader.Region)_r.ParamGet("/reader/region/id");
@@ -60,17 +60,17 @@ class Program
                     if (reg == Reader.Region.NA) { chosen = reg; break; }
 
                 _r.ParamSet("/reader/region/id", chosen);
-                Console.WriteLine($"🌐 Region set to: {chosen}");
+                Console.WriteLine($"Region set to: {chosen}");
             }
             else
             {
-                Console.WriteLine($"🌐 Region already set to: {currentRegion}");
+                Console.WriteLine($"Region already set to: {currentRegion}");
             }
 
             // ---- PROTOCOL + POWER ----
             _r.ParamSet("/reader/tagop/protocol", TagProtocol.GEN2);
             _r.ParamSet("/reader/radio/readPower", 2500);
-            Console.WriteLine($"⚡ RF Power: {_r.ParamGet("/reader/radio/readPower")}");
+            Console.WriteLine($"RF Power: {_r.ParamGet("/reader/radio/readPower")}");
 
             // ---- READ PLAN ON ANT1 ----
             var plan = new SimpleReadPlan(new int[] { 1 }, TagProtocol.GEN2, null, null, 1000);
@@ -79,7 +79,7 @@ class Program
             // ---- USER MEMORY MANAGER ----
             var userMem = new UserMemoryManager(_r!);
 
-            Console.WriteLine("🔄 ENTER/LEAVE detection using blocking reads (5 s timeout).");
+            Console.WriteLine("ENTER/LEAVE detection using blocking reads (5 s timeout).");
             Console.WriteLine("   On [ENTER], USER[0..3] will be read.");
             Console.WriteLine("   Press Q, 'end'+Enter, or Ctrl+C to stop.");
 
@@ -198,7 +198,7 @@ class Program
             try { _r?.Destroy(); } catch { }
             _r = null;
             Thread.Sleep(200);
-            Console.WriteLine("✅ Reader stopped and released. You can run again now.");
+            Console.WriteLine("Reader stopped and released. You can run again now.");
         }
     }
 }
@@ -236,8 +236,18 @@ public class RFIDEventLogger
     {
         _jsonFile = jsonFile;
 
-        // Load existing events from file
-        LoadExistingEvents();
+        // Overwrite previous file (start fresh)
+        try
+        {
+            if (File.Exists(_jsonFile))
+                File.Delete(_jsonFile);
+            // or to keep a valid empty JSON array instead of deleting:
+            // File.WriteAllText(_jsonFile, "[]");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Could not clear existing file: {ex.Message}");
+        }
 
         // Setup serial connection to Pico if specified
         if (!string.IsNullOrEmpty(serialPort))
@@ -255,7 +265,7 @@ public class RFIDEventLogger
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"⚠️  Could not open serial port {serialPort}: {ex.Message}");
+                Console.WriteLine($"Could not open serial port {serialPort}: {ex.Message}");
                 _serialPort = null;
             }
         }
@@ -272,12 +282,12 @@ public class RFIDEventLogger
                 if (events != null)
                 {
                     _events.AddRange(events);
-                    Console.WriteLine($"📂 Loaded {events.Count} existing events from {_jsonFile}");
+                    Console.WriteLine($"Loaded {events.Count} existing events from {_jsonFile}");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"⚠️  Could not load existing events: {ex.Message}");
+                Console.WriteLine($"Could not load existing events: {ex.Message}");
             }
         }
     }
@@ -336,7 +346,7 @@ public class RFIDEventLogger
             // Send to Pico (newline-delimited JSON)
             _serialPort.WriteLine(json);
             
-            Console.WriteLine($"📤 Sent to Pico: {json}");
+            Console.WriteLine($"Sent to Pico: {json}");
         }
         catch (Exception ex)
         {
