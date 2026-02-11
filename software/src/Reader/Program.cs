@@ -36,10 +36,10 @@ class Program
         {
             // ---- INITIALIZE LOGGER ----
             // Option 1: Log to file only
-            //_logger = new RFIDEventLogger("rfid_events.json");
+            _logger = new RFIDEventLogger("rfid_events.json");
             
             // Option 2: Log to file AND send to Pico via serial
-            _logger = new RFIDEventLogger("rfid_events.json", "com5", 115200);
+            //_logger = new RFIDEventLogger("rfid_events.json", "com5", 115200);
             
             Console.WriteLine("Logger initialized");
 
