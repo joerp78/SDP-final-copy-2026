@@ -1,46 +1,70 @@
-# Capstone 2025 – Team XX
-
-This repository contains all project artifacts for our year-long capstone project.  
-It is organized to clearly separate **hardware** and **software** development, while also supporting shared documentation, data, and results.
-
----
-
-## 📂 Repository Structure
+# SDP 2026 – BLOSSM  
+### Low-Power Soil Monitoring Backscatter System  
+UMass Amherst – ECE Senior Design
 
 ---
 
-## 🛠 Usage Notes
+## 📘 Project Overview
 
-- **docs/**  
-  All project documentation, design specs, and final reports live here. Keep it updated regularly.
+**BLOSSM** is a low-power, long-range soil monitoring system designed for community garden deployment.
 
-- **hardware/**  
-  Contains circuit schematics, PCB layouts, CAD models, and firmware. If firmware grows large, it can move into `software/`.
-
-- **software/**  
-  Contains the project’s codebase, with unit tests, libraries, and scripts. Follow good coding practices and include test coverage.
-
-- **data/** vs **results/**  
-  Keep **raw data** (inputs, logs, calibration files) separate from **processed results** (plots, analysis outputs). This ensures reproducibility.
-
-- **tools/**  
-  Place any helper scripts, configuration files, or utilities used by both HW and SW here.
+The system uses **UHF backscatter communication (~900 MHz)** to transmit soil temperature and environmental data from distributed sensor nodes to a central reader. The goal is to build a scalable, energy-efficient sensing platform with minimal power consumption and hardware cost.
 
 ---
 
-## 📑 Conventions
+## 📁 Repository Structure
 
-- **Empty folders** contain a `.gitkeep` placeholder to ensure they are tracked by Git.
-- **Branching**: Use feature branches (`feature/hw-schematics`, `feature/sw-api`) and merge via pull requests.
-- **Commits**: Write descriptive commit messages, e.g.,  
-  `Add PCB schematic v1.0` or `Implement sensor data parser`.
+/docs  
+/hardware  
+/software  
+/data  
+/results  
+/tools  
 
 ---
 
-## 👥 Team Notes
+## 🔌 /hardware
+- PCB schematics & layouts  
+- Gerbers and BOM  
+- 900 MHz PCB monopole antenna  
+- Sensor interface & power management  
+- Backscatter load modulation network  
 
-- Update the **meeting_minutes/** after every weekly meeting.  
-- Keep the **README.md** in `hardware/` and `software/` updated with build/setup instructions.  
-- Document all design decisions in `docs/design_specs/`.  
+---
+
+## 💻 /software
+- MSP430 firmware  
+- Sensor sampling & formatting  
+- RFID/backscatter interface  
+- Low-power state machine  
+
+---
+
+## 📊 /data
+- Raw sensor logs  
+- Calibration data  
+- Range and power testing results  
+
+---
+
+## 📈 /results
+- Performance plots  
+- Communication range analysis  
+- Power consumption characterization  
+
+---
+
+## 🛠 /tools
+- Python scripts for data parsing & plotting  
+- Test utilities  
+- BOM spreadsheets  
+
+---
+
+## 🎯 Project Goals
+- Reliable long-range communication  
+- Ultra-low power operation  
+- Scalable multi-node deployment  
+- Functional prototype for real-world testing  
 
 ---
