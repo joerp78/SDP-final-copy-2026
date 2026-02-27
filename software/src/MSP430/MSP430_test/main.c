@@ -19,6 +19,7 @@
 #include <math.h>         // For log() and 1/x — link with -lm if needed
 
 // ---- Thermistor & Circuit Constants ----
+// CURRENTLY NOT USED BUT KEEPING FOR REFERENCE 
 #define R_FIXED     10000.0f    // Fixed resistor in voltage divider (Ω)
 #define R0_NTC      10000.0f    // NTC resistance at 25°C (Ω)
 #define BETA        3435.0f     // Beta constant B25/50 (K)
@@ -27,13 +28,42 @@
 
 // ---- Global Variables ----
 volatile uint16_t adc_raw = 0;
-volatile float temperature_C = 0.0f;
-volatile float temperature_F = 0.0f;
+volatile int16_t temperature_C_x10 = 0;
+volatile int16_t temperature_F_x10 = 0;
 
 // ---- Function Prototypes ----
 void init_ADC(void);
 uint16_t read_ADC(void);
-float adc_to_temperature_C(uint16_t adc_val);
+int16_t adc_to_temperature_x10(uint16_t adc_val);
+
+typedef struct {
+    uint16_t adc;
+    int16_t  temp_x10;     // Temperature × 10
+} TempLookup_t;
+
+//  ADC values assume: R_fixed=10k, NTC R0=10k, B=3435, VCC ref
+static const TempLookup_t lut[] = {
+//    ADC    T×10     R_th        Verify: ADC/4095 ratio
+    {  585, 800 },  //  80.0°C   R= 1,665Ω   0.143
+    {  740, 700 },  //  70.0°C   R= 2,206Ω   0.181
+    {  940, 600 },  //  60.0°C   R= 2,981Ω   0.230
+    { 1192, 500 },  //  50.0°C   R= 4,107Ω   0.291
+    { 1495, 400 },  //  40.0°C   R= 5,751Ω   0.365
+    { 1668, 350 },  //  35.0°C   R= 6,874Ω   0.407
+    { 1854, 300 },  //  30.0°C   R= 8,278Ω   0.453
+    { 2048, 250 },  //  25.0°C   R=10,000Ω   0.500  ← VCC/2 ✓
+    { 2247, 200 },  //  20.0°C   R=12,163Ω   0.549
+    { 2450, 150 },  //  15.0°C   R=14,895Ω   0.598
+    { 2655, 100 },  //  10.0°C   R=18,432Ω   0.648
+    { 2850,  50 },  //   5.0°C   R=22,884Ω   0.696
+    { 3037,   0 },  //   0.0°C   R=28,700Ω   0.742
+    { 3210, -50 },  //  -5.0°C   R=36,260Ω   0.784
+    { 3367,-100 },  // -10.0°C   R=46,280Ω   0.822
+    { 3507,-150 },  // -15.0°C   R=59,660Ω   0.856
+    { 3627,-200 },  // -20.0°C   R=77,450Ω   0.886
+};
+
+#define LUT_SIZE (sizeof(lut) / sizeof(lut[0]))
 
 void main(void)
 {
@@ -56,78 +86,84 @@ void main(void)
 
     while (1)
     {
+        P1OUT &= ~BIT3;
+
         adc_raw = read_ADC();
 
+        __delay_cycles(100000);         // ~100ms delay
+
         // Convert to temperature
-        temperature_C = adc_to_temperature_C(adc_raw);
-        temperature_F = (temperature_C * 9.0f / 5.0f) + 32.0f;
+        temperature_C_x10 = adc_to_temperature_x10(adc_raw);
+        temperature_F_x10 = (temperature_C_x10 * 9 / 5) + 320;
+
+        __no_operation();
 
         __delay_cycles(100000);         // ~100ms delay
     }
 }
 
-/*---------------------------------------------------------------------------
- * init_ADC() — Same as Part 1
- *---------------------------------------------------------------------------*/
+
 void init_ADC(void)
 {
+    ADCCTL0 &= ~ADCENC;
     ADCCTL0 = ADCSHT_2 | ADCON;
-    ADCCTL1 = ADCSHP | ADCSSEL_2;
+    ADCCTL1 = ADCSHP;
     ADCCTL2 = ADCRES_2;
     ADCMCTL0 = ADCINCH_0 | ADCSREF_0;
 }
 
-/*---------------------------------------------------------------------------
- * read_ADC() — Same as Part 1
- *---------------------------------------------------------------------------*/
+
 uint16_t read_ADC(void)
 {
     ADCCTL0 |= ADCENC | ADCSC;
     while (!(ADCIFG & ADCIFG0));
+    //__delay_cycles(100);
     ADCIFG &= ~ADCIFG0;
     ADCCTL0 &= ~ADCENC;
     return ADCMEM0;
 }
 
-/*---------------------------------------------------------------------------
- * adc_to_temperature_C()
- *
- * Converts a 12-bit ADC reading to temperature in °C.
- *
- * Step 1: ADC → Thermistor Resistance
- *   Since the thermistor is between the ADC pin and GND:
- *     Vout = Vcc × R_th / (R_fixed + R_th)
- *     ADC  = 4095 × R_th / (R_fixed + R_th)
- *   Solving for R_th:
- *     R_th = R_fixed × ADC / (4095 - ADC)
- *
- * Step 2: Resistance → Temperature (Beta Equation)
- *     1/T = 1/T0 + (1/Beta) × ln(R_th / R0)
- *     T(°C) = T(K) - 273.15
- *
- * Parameters:
- *   adc_val - raw 12-bit ADC reading (0–4095)
- *
- * Returns:
- *   Temperature in degrees Celsius (float)
- *---------------------------------------------------------------------------*/
-float adc_to_temperature_C(uint16_t adc_val)
+int16_t adc_to_temperature_x10(uint16_t adc_val)
 {
-    float r_thermistor;
-    float temp_kelvin;
+    uint16_t i;
 
-    // Guard against division by zero
-    if (adc_val >= 4095) adc_val = 4094;
-    if (adc_val == 0) adc_val = 1;
+    // Clamp to table range
+    if (adc_val <= lut[0].adc)
+        return lut[0].temp_x10;                 // Above 80°C
 
-    // Step 1: Calculate thermistor resistance from ADC value
-    //   R_th = R_fixed × ADC / (4095 - ADC)
-    r_thermistor = R_FIXED * ((float)adc_val / (ADC_MAX - (float)adc_val));
+    if (adc_val >= lut[LUT_SIZE - 1].adc)
+        return lut[LUT_SIZE - 1].temp_x10;      // Below -20°C
 
-    // Step 2: Beta equation → Temperature in Kelvin
-    //   1/T = 1/T0 + (1/B) × ln(R_th / R0)
-    temp_kelvin = 1.0f / ((1.0f / T0_KELVIN) + (1.0f / BETA) * logf(r_thermistor / R0_NTC));
+    // Find the two table entries that bracket our ADC value
+    // Table is sorted: low ADC = hot, high ADC = cold
+    for (i = 0; i < LUT_SIZE - 1; i++)
+    {
+        if (adc_val >= lut[i].adc && adc_val <= lut[i + 1].adc)
+        {
+            // =============================================
+            // Linear interpolation between two table entries
+            //
+            // Given:
+            //   adc_val is between lut[i].adc and lut[i+1].adc
+            //   We want the temperature between lut[i].temp and lut[i+1].temp
+            //
+            //         (adc_val - adc_lo)
+            // T = T_hi - ──────────────── × (T_hi - T_lo)
+            //           (adc_hi - adc_lo)
+            //
+            // Note: "hi" temp = lut[i] (lower ADC = hotter)
+            // =============================================
+            uint16_t adc_lo  = lut[i].adc;
+            uint16_t adc_hi  = lut[i + 1].adc;
+            int16_t  temp_hi = lut[i].temp_x10;      // Higher temp
+            int16_t  temp_lo = lut[i + 1].temp_x10;  // Lower temp
 
-    // Step 3: Convert Kelvin → Celsius
-    return temp_kelvin - 273.15f;
+            int32_t numerator   = (int32_t)(adc_val - adc_lo) * (temp_hi - temp_lo);
+            int16_t denominator = (int16_t)(adc_hi - adc_lo);
+
+            return temp_hi - (int16_t)(numerator / denominator);
+        }
+    }
+
+    return 0;   // Should never reach here
 }
