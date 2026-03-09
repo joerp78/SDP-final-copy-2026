@@ -2,9 +2,37 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build:
+      context: ./software/src/server
+      dockerfile: Dockerfile
     ports:
-      - "8081:8081"  # CHANGED
+      - "8081:8081"
     env_file:
-      - .env         # NEW
+      - .env
     restart: unless-stopped
+    networks:
+      - sdp-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - sdp-network
+
+  webhook:
+    build: ./webhook
+    restart: unless-stopped
+    environment:
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/sdp:/opt/sdp
+    networks:
+      - sdp-network
+
+networks:
+  sdp-network:
+    driver: bridge
