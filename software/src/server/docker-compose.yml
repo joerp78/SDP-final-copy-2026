@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8081:8081"  # CHANGED
+    env_file:
+      - .env         # NEW
+    restart: unless-stopped
