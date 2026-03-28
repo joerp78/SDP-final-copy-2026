@@ -1,27 +1,25 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\joeno\\Documents\\GitHub\\sdp26-26\\software\\src\\Reader\\STest.csproj": {}
+    "C:\\Users\\georg\\Desktop\\sdp26-26-main\\software\\src\\Reader\\STest.csproj": {}
   },
   "projects": {
-    "C:\\Users\\joeno\\Documents\\GitHub\\sdp26-26\\software\\src\\Reader\\STest.csproj": {
+    "C:\\Users\\georg\\Desktop\\sdp26-26-main\\software\\src\\Reader\\STest.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\joeno\\Documents\\GitHub\\sdp26-26\\software\\src\\Reader\\STest.csproj",
+        "projectUniqueName": "C:\\Users\\georg\\Desktop\\sdp26-26-main\\software\\src\\Reader\\STest.csproj",
         "projectName": "STest",
-        "projectPath": "C:\\Users\\joeno\\Documents\\GitHub\\sdp26-26\\software\\src\\Reader\\STest.csproj",
-        "packagesPath": "C:\\Users\\joeno\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\joeno\\Documents\\GitHub\\sdp26-26\\software\\src\\Reader\\obj\\",
+        "projectPath": "C:\\Users\\georg\\Desktop\\sdp26-26-main\\software\\src\\Reader\\STest.csproj",
+        "packagesPath": "C:\\Users\\georg\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\georg\\Desktop\\sdp26-26-main\\software\\src\\Reader\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\joeno\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+          "C:\\Users\\georg\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
         ],
         "sources": {
-          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -39,7 +37,8 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "direct"
-        }
+        },
+        "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
         "net8.0": {
@@ -66,7 +65,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
