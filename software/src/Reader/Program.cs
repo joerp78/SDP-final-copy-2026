@@ -73,7 +73,7 @@ class Program
             Console.WriteLine("Logger initialized");
 
             // ---- RFID READER SETUP ----
-            _r = Reader.Create("tmr:///com11");   // change COM if needed
+            _r = Reader.Create("tmr:///com10");   // change COM if needed
             _r.Connect();
             Console.WriteLine("Connected to RFID Reader");
 
