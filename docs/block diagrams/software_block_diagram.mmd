@@ -10,21 +10,18 @@ sequenceDiagram
     participant PicoLTE as PicoLTE Modem
     participant Cloud as Cloud / Server
 
-    Note over PowerCtrl,Hub: System power cycle
     PowerCtrl->>Hub: 0. Supply power (hourly wake cycle)
     Hub->>Hub: Boot OS and initialize services
 
-    Note over SensorMCU,TagIC: Sensor Node operations
     RFReader->>TagIC: 1. RF Poll (CW + Gen2)
     TagIC-->>RFReader: 2. Respond (EPC + payload)
-    RFReader->>SensorMCU: 3. Wake MCU (timed signal)
+    TagIC->>SensorMCU: 3. Wake MCU (timed signal)
     SensorMCU->>SensorMCU: 4. Power sensors, init ADC
     SensorMCU->>SensorMCU: 5. Sample temp, moisture, cond
     SensorMCU->>SensorMCU: 6. Process and format data
     SensorMCU->>TagIC: 7. Write user memory (I2C)
     SensorMCU-->>SensorMCU: 8. Enter standby
 
-    Note over RFReader,Hub: Edge Gateway collects and buffers data
     RFReader->>Hub: 9. Return tag records
     Hub->>Hub: 10. Read local sensors
     Hub->>Hub: 11. Buffer parsed records (SQLite)
@@ -43,10 +40,7 @@ sequenceDiagram
     Cloud->>Cloud: 19. Validate key & store in TimescaleDB
     Cloud->>Cloud: 20. Serve latest(device_id) to Web UI
 
-    Note over Hub,PowerCtrl: Power management and shutdown
     Hub->>RFReader: 21. Power down reader
-    Hub->>SensorMCU: 22. Sleep / standby
-    Hub->>PicoLTE: 23. Modem sleep
-    Hub->>Hub: 24. Shutdown sequence complete
-    Hub->>PowerCtrl: 25. Signal job complete
-    PowerCtrl-->>Hub: 26. Cut power until next cycle
+    Hub->>PicoLTE: 22. Modem sleep
+    Hub->>PowerCtrl: 23. Signal job complete
+    PowerCtrl-->>Hub: 24. Cut power until next cycle
