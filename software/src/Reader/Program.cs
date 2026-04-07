@@ -11,6 +11,12 @@ class Program
     static Reader? _r = null;
     static RFIDEventLogger? _logger = null;
 
+    static readonly HashSet<string> AllowedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+    "0080B0443C00000012787622",
+    "0080B0443C00000012787627"
+    };
+
     class TagState
     {
         public bool Present;
@@ -22,6 +28,29 @@ class Program
 
     // How long a tag must be unseen before we call it "gone"
     static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
+
+    static string? TryReadUserMemoryWithRetries(UserMemoryManager userMem, string epc, int attempts = 4, int delayMs = 150)
+    {
+        Exception? lastEx = null;
+
+        for (int i = 0; i < attempts; i++)
+        {
+            try
+            {
+                ushort[] userData = userMem.ReadUserWords(0, 4, epc);
+                return UserMemoryManager.ToHexString(userData);
+            }
+            catch (Exception ex)
+            {
+                lastEx = ex;
+                if (i < attempts - 1)
+                    Thread.Sleep(delayMs);
+            }
+        }
+
+        Console.WriteLine($"           USER read failed after retries: {lastEx?.Message}");
+        return null;
+    }
 
     static void Main()
     {
@@ -44,7 +73,7 @@ class Program
             Console.WriteLine("Logger initialized");
 
             // ---- RFID READER SETUP ----
-            _r = Reader.Create("tmr:///com7");   // change COM if needed
+            _r = Reader.Create("tmr:///com10");   // change COM if needed
             _r.Connect();
             Console.WriteLine("Connected to RFID Reader");
 
@@ -122,6 +151,9 @@ class Program
                     {
                         string epc = tr.Tag.EpcString;
 
+                        if (!AllowedTags.Contains(epc))
+                            continue;
+
                         if (!_tags.TryGetValue(epc, out var state))
                         {
                             state = new TagState { Present = false, LastSeen = now };
@@ -137,16 +169,11 @@ class Program
                             Console.WriteLine($"{now:HH:mm:ss}  [ENTER] EPC:{epc}");
 
                             // ---- READ USER MEMORY ON FIRST ENTER ----
-                            string? userHex = null;
-                            try
+                            string? userHex = TryReadUserMemoryWithRetries(userMem, epc, 4, 150);
+
+                            if (userHex != null)
                             {
-                                ushort[] userData = userMem.ReadUserWords(0, 4, epc);
-                                userHex = UserMemoryManager.ToHexString(userData);
                                 Console.WriteLine($"           USER[0..3] = {userHex}");
-                            }
-                            catch (Exception exUser)
-                            {
-                                Console.WriteLine($"           USER read failed: {exUser.Message}");
                             }
 
                             // ---- LOG ENTER EVENT ----

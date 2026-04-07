@@ -1,0 +1,46 @@
+%%{init: {"themeVariables": {"fontSize": "24px", "sequenceNumberFontSize": "22px"}}}%%
+sequenceDiagram
+    autonumber
+
+    participant PowerCtrl as Power Controller
+    participant SensorMCU as Sensor MCU
+    participant TagIC as Tag IC
+    participant RFReader as Edge RF Reader
+    participant Hub as Edge Gateway (Raspberry Pi + Sensors)
+    participant PicoLTE as PicoLTE Modem
+    participant Cloud as Cloud / Server
+
+    PowerCtrl->>Hub: 0. Supply power (hourly wake cycle)
+    Hub->>Hub: Boot OS and initialize services
+
+    RFReader->>TagIC: 1. RF Poll (CW + Gen2)
+    TagIC-->>RFReader: 2. Respond (EPC + payload)
+    TagIC->>SensorMCU: 3. Wake MCU (timed signal)
+    SensorMCU->>SensorMCU: 4. Power sensors, init ADC
+    SensorMCU->>SensorMCU: 5. Sample temp, moisture, cond
+    SensorMCU->>SensorMCU: 6. Process and format data
+    SensorMCU->>TagIC: 7. Write user memory (I2C)
+    SensorMCU-->>SensorMCU: 8. Enter standby
+
+    RFReader->>Hub: 9. Return tag records
+    Hub->>Hub: 10. Read local sensors
+    Hub->>Hub: 11. Buffer parsed records (SQLite)
+    Hub->>Hub: 12. Retry/backoff if network unavailable
+
+    Note over Hub,Cloud: Data transmission (WiFi primary, LTE fallback)
+    Hub->>Cloud: 13. HTTP POST via WiFi
+    alt WiFi success
+        Cloud-->>Hub: 14. 200 OK {ingest_id, received_ts}
+    else WiFi unavailable
+        Hub->>PicoLTE: 15. Initialize LTE connection
+        PicoLTE->>Cloud: 16. HTTP POST via LTE
+        Cloud-->>PicoLTE: 17. 200 OK
+        PicoLTE-->>Hub: 18. Forward response
+    end
+    Cloud->>Cloud: 19. Validate key & store in TimescaleDB
+    Cloud->>Cloud: 20. Serve latest(device_id) to Web UI
+
+    Hub->>RFReader: 21. Power down reader
+    Hub->>PicoLTE: 22. Modem sleep
+    Hub->>PowerCtrl: 23. Signal job complete
+    PowerCtrl-->>Hub: 24. Cut power until next cycle
