@@ -15,7 +15,7 @@ def deploy():
     if not hmac.compare_digest(sig, expected):
         return jsonify({'error': 'Unauthorized'}), 401
 
-    subprocess.Popen(['/opt/sdp/deploy.sh'])
+    subprocess.Popen(['/opt/sdp/software/src/server/deploy.sh'])
     return jsonify({'status': 'Deploy triggered'}), 200
 
 if __name__ == '__main__':

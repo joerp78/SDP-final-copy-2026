@@ -3,7 +3,7 @@ version: '3.8'
 services:
   app:
     build:
-      context: ./software/src/server
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8081:8081"

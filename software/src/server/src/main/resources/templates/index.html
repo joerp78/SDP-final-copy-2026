@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="utf-8"/>
-    <title>RFID Events — Dashboard</title>
+    <title>RFID Events Dashboard</title>
     <style>
         body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:20px;background:#f6f8fb}
         .wrap{max-width:1200px;margin:0 auto}
@@ -20,7 +20,7 @@
 </head>
 <body>
 <div class="wrap">
-    <h1>📡 RFID Event Monitor</h1>
+    <h1>RFID Event Monitor</h1>
     <p class="count">Total Events: <strong th:text="${#lists.size(events)}">0</strong></p>
 
     <table>
@@ -33,19 +33,20 @@
             <th>RSSI</th>
             <th>Antenna</th>
             <th>User Memory</th>
+	    <th>Temperature (C)</th>
         </tr>
         </thead>
         <tbody>
         <tr th:each="event : ${events}">
             <td th:text="${event.id()}">1</td>
             <td th:text="${event.timestamp()}">2025-11-17...</td>
-            <td th:class="${event.eventType() == 'ENTER' ? 'enter' : 'leave'}"
-                th:text="${event.eventType()}">ENTER</td>
+            <td th:class="${event.eventType() == 'ENTER' ? 'enter' : 'leave'}"th:text="${event.eventType()}">ENTER</td>
             <td class="epc" th:text="${event.epc()}">DEADBEEF...</td>
             <td th:text="${event.rssi() != null ? event.rssi() + ' dBm' : '-'}">-57 dBm</td>
             <td th:text="${event.antennaId() != null ? event.antennaId() : '-'}">1</td>
             <td class="epc" th:text="${event.userMemory() != null ? event.userMemory() : '-'}">0000...</td>
-        </tr>
+            <td th:text="${event.temperatureC != null ? event.temperatureC : '-'}">-</td>
+	</tr>
         <tr th:if="${#lists.isEmpty(events)}">
             <td colspan="7" class="muted" style="text-align:center;padding:30px">
                 No events recorded yet. Waiting for Pi data...
