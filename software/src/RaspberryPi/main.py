@@ -1,82 +1,185 @@
-from pico_lte.core import PicoLTE
-from pico_lte.common import debug
-import config
-from data.json_parser import JSONParser
-from services.api_client import APIClient
+import sys
 import time
+import ujson                       # MicroPython's native JSON — avoids JSONDecodeError issue
 
 
+def respond(success, error=None):
+    if success:
+        sys.stdout.write('{"success": true}\n')
+    else:
+        msg = str(error).replace('"', "'") if error else "Unknown error"
+        sys.stdout.write('{"success": false, "error": "' + msg + '"}\n')
+    # No flush() — MicroPython stdout is unbuffered
 
-def load_test_json():
-    """Load JSON from test file"""
-    try:
-        with open(config.TEST_JSON_PATH, 'r') as f:
-            return f.read()
-    except Exception as e:
-        print(f"Error loading test file: {e}")
-        return None
 
 def initialize_lte():
-#     Initialize and connect to LTE network 
-    print("=== Initializing Sixfab Pico LTE ===\n")
-    
-    # Create PicoLTE instance
-    pico_lte = PicoLTE()
-    
-    pico_lte.network.register_network()
-    pico_lte.http.set_context_id()
-    pico_lte.network.get_pdp_ready()
-    # Initialize modem
-    print("Initializing modem...")
-    if pico_lte.network.register_network():
-        print("✓ Registered to network")
-    else:
-        print("✗ Failed to register to network")
+    print("=== Initializing Sixfab Pico LTE ===")
+    try:
+        from pico_lte.core import PicoLTE
+        pico_lte = PicoLTE()
+    except Exception as e:
+        print(f"✗ Failed to import or create PicoLTE: {e}")
         return None
-        return pico_lte
+
+    try:
+        pico_lte.network.register_network()
+    except Exception as e:
+        print(f"✗ register_network (1) failed: {e}")
+
+    try:
+        pico_lte.http.set_context_id()
+    except Exception as e:
+        print(f"✗ set_context_id failed: {e}")
+
+    try:
+        pico_lte.network.get_pdp_ready()
+    except Exception as e:
+        print(f"✗ get_pdp_ready failed: {e}")
+
+    try:
+        result = pico_lte.network.register_network()
+        if result:
+            print("✓ Registered to network")
+            return pico_lte
+        else:
+            print("✗ register_network (2) returned False")
+            return None
+    except Exception as e:
+        print(f"✗ register_network (2) failed: {e}")
+        return None
 
 
 def main():
-    print("=== RFID Event Upload Test ===\n")
+    print("=== PicoLTE RFID Relay ===")
+
+    try:
+        from data.json_parser import JSONParser
+        from services.api_client import APIClient
+        imports_ok = True
+    except Exception as e:
+        print(f"✗ Import error: {e}")
+        imports_ok = False
 
     pico_lte = initialize_lte()
     if not pico_lte:
-        print("✗ LTE initialization failed")
-        return
-    
+        print("✗ LTE unavailable — will respond with errors.")
 
-    api = APIClient(pico_lte)
-    parser = JSONParser()
-    
-    if config.MOCK_USB_DATA:
-        json_string = load_test_json()
-        if not json_string:
-            print("Failed to load test JSON file")
-            return
-        print(f"✓ Loaded JSON from: {config.TEST_JSON_PATH}")
-            
+    if imports_ok and pico_lte:
         try:
-            events = parser.parse_rfid_reading(json_string)
-            print(f"✓ Parsed {len(events)} events\n")
-                
-            for i, event in enumerate(events, 1):
-                print(f"  Event {i}: {event['eventType']} - {event['epc']}")
-                
-            success = api.send_events(events)
-                
-            if success:
-                print(f"\n✓ Successfully uploaded {len(events)} events!")
-            else:
-                print(f"\n✗ Upload failed")
-                
-        except ValueError as e:
-            print(f"✗ Parse error: {e}")
+            api    = APIClient(pico_lte)
+            parser = JSONParser()
         except Exception as e:
-            print(f"✗ Unexpected error: {e}")
-
+            print(f"✗ Failed to create API/parser: {e}")
+            api    = None
+            parser = None
     else:
-        print("MOCK_USB_DATA is False - would read from USB here")
+        api    = None
+        parser = None
+
+    print("✓ Ready. Broadcasting ready signal until first message...")
+
+    # ── Broadcast ready using uselect for non-blocking stdin reads ────────────
+    import uselect
+    poller = uselect.poll()
+    poller.register(sys.stdin, uselect.POLLIN)
+
+    first_line = None
+    while True:
+        sys.stdout.write('{"status": "ready"}\n')
+        # Poll for incoming data — 3 second timeout (milliseconds)
+        events = poller.poll(3000)
+        if events:
+            first_line = sys.stdin.readline()
+            if first_line and first_line.strip():
+                break   # got real data — exit ready loop
+
+    print("✓ Listening for JSON data on serial...")
+
+    # Process the first line that broke us out of the ready loop
+    if first_line and first_line.strip():
+        _handle_line(first_line, api, parser)
+
+    # ── Main listen loop ──────────────────────────────────────────────────────
+    while True:
+        try:
+            line = sys.stdin.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            line = line.strip()
+            if not line:
+                continue
+            _handle_line(line, api, parser)
+        except Exception as e:
+            print(f"[ERROR] {e}")
+            respond(False, str(e))
 
 
-if __name__ == "__main__":
+def _handle_line(line, api, parser):
+    """Process one received line — shared by ready loop and main loop."""
+    line = line.replace('\r', '').replace('\n', '').strip()
+
+    # ── Strip any garbage prepended by MicroPython REPL echo ─────────────────
+    # Find the first JSON character — either '[' for an array or '{' for an object
+    json_start = -1
+    for i, ch in enumerate(line):
+        if ch in ('[', '{'):
+            json_start = i
+            break
+
+    if json_start == -1:
+        print(f"[WARN] No JSON found in line: {repr(line[:80])}")
+        respond(False, "No JSON found in received data")
+        return
+
+    if json_start > 0:
+        print(f"[WARN] Stripped {json_start} garbage byte(s): {repr(line[:json_start])}")
+        line = line[json_start:]
+
+    print(f"[RX] {len(line)} byte(s)")
+    print(f"[RX RAW] {repr(line[:80])}")
+
+    if api is None or parser is None:
+        respond(False, "LTE or parser not available")
+        return
+
+    try:
+        data = ujson.loads(line)
+        if isinstance(data, list):
+            events = [_parse_event(e) for e in data]
+        else:
+            events = [_parse_event(data)]
+
+        print(f"[INFO] Parsed {len(events)} event(s) — sending via LTE...")
+        success = api.send_events(events)
+        respond(success, None if success else "API call failed")
+
+    except ValueError as e:
+        print(f"[ERROR] JSON parse failed: {e}")
+        respond(False, f"JSON parse failed: {e}")
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        respond(False, str(e))
+
+
+def _parse_event(event):
+    return {
+        'timestamp':  event.get('timestamp'),
+        'eventType':  event.get('eventType'),
+        'epc':        event.get('epc'),
+        'userMemory': event.get('userMemory'),
+        'rssi':       event.get('rssi'),
+        'antennaId':  event.get('antennaId'),
+    }
+
+
+try:
     main()
+except Exception as e:
+    print(f"[FATAL] {e}")
+    while True:
+        try:
+            sys.stdin.readline()
+            respond(False, f"Fatal crash: {e}")
+        except Exception:
+            time.sleep(1)

@@ -1,0 +1,12 @@
+{
+    "sdp": {
+        "apn": "super"
+    },
+    "urc_port": "usb",
+    "ssl": {
+        "ssl_version": "4",
+        "ignorelocaltime": "1",
+        "ciphersuite": "0XFFFF",
+        "seclevel": "0"
+    }
+}
