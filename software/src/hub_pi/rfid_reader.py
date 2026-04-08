@@ -23,13 +23,13 @@ import serial                          # pip install pyserial
 #  CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-READER_URI       = "tmr:///dev/ttyACM0"
+READER_URI       = "tmr:///dev/ttyACM1"
 READER_BAUDRATE  = 115200
 REGION           = "NA2"
 ANTENNA_PORT     = 1
 READ_POWER_CDBM  = 2500
 READ_WINDOW_MS   = 500                 # Milliseconds per blocking read call
-READ_WINDOW_SECS = 30                  # Total collection window in seconds
+READ_WINDOW_SECS = 5                  # Total collection window in seconds
 USER_MEM_WORDS   = 4
 USER_MEM_RETRIES = 8
 USER_MEM_DELAY   = 0.15
@@ -41,9 +41,10 @@ REQUIRE_USER_MEMORY = True             # True = only send events that have user 
 
 # ── LTE / PicoLTE ─────────────────────────────────────────────────────────────
 FORCE_LTE        = True               # True = skip WiFi, always send via LTE
-PICO_PORT        = "/dev/ttyACM1"      # Serial port for Sixfab PicoLTE
+PICO_PORT        = "/dev/ttyACM0"      # Serial port for Sixfab PicoLTE
 PICO_BAUD        = 115200
 PICO_TIMEOUT_SEC = 60                  # How long to wait for Pico LTE response
+PICO_WAIT_TIMEOUT = 60
 
 ALLOWED_TAGS = {
     "0080B0443C00000012787622",
@@ -128,6 +129,30 @@ def build_event(event_type: str,
     if antenna_id  is not None: evt["antennaId"]  = antenna_id
     return evt
 
+def wait_for_pico_ready(ser: serial.Serial, timeout = PICO_WAIT_TIMEOUT) -> bool:
+    """Wait for Pico to broadcast ready signal after LTE init."""
+    print(f"[LTE] Waiting up to {timeout}s for Pico LTE ready signal...")
+    deadline = time.time() + timeout
+    while _run and time.time() < deadline:
+        try:
+            raw = ser.readline()
+            if not raw:
+                continue
+            line = raw.decode('utf-8', errors='replace').strip()
+            if not line:
+                continue
+            msg = json.loads(line)
+            if msg.get("status") == "ready":
+                print("[LTE] ✓ Pico is ready.")
+                return True
+        except (json.JSONDecodeError, Exception):
+            pass
+        
+    if not _run:
+        return False
+    else:
+        print("[LTE] ✗ Pico never became ready.")
+        return False
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  SENDING
@@ -153,30 +178,34 @@ def send_events_wifi(events: List[dict]) -> bool:
 
 
 def send_events_lte(events: List[dict], pico_ser: serial.Serial) -> bool:
-    """
-    Send events to the Sixfab PicoLTE via serial.
-    Protocol:
-      Pi   → single JSON array terminated with \\n
-      Pico → single JSON response line: {"success": true} or {"success": false, "error": "..."}
-    """
     try:
         payload = json.dumps(events) + "\n"
-        print(f"[LTE] Sending {len(events)} event(s) to Pico ({len(payload)} bytes)...")
+        print(f"[LTE] Sending {len(events)} event(s) ({len(payload)} bytes)...")
         pico_ser.write(payload.encode('utf-8'))
         pico_ser.flush()
 
-        response_line = pico_ser.readline().decode('utf-8').strip()
-        if not response_line:
-            print("[LTE ✗] No response from Pico — timed out.")
-            return False
+        deadline = time.time() + PICO_TIMEOUT_SEC
+        while time.time() < deadline:
+            raw = pico_ser.readline()
+            if not raw:
+                continue
+            line = raw.decode('utf-8', errors='replace').strip()
+            if not line:
+                continue
+            try:
+                result = json.loads(line)
+                if "success" in result:          # ignore status/ready messages
+                    if result["success"]:
+                        print("[LTE ✓] Events delivered.")
+                        return True
+                    else:
+                        print(f"[LTE ✗] Pico failure: {result.get('error', '?')}")
+                        return False
+            except json.JSONDecodeError:
+                continue
 
-        result = json.loads(response_line)
-        if result.get("success"):
-            print("[LTE ✓] Events delivered via LTE.")
-            return True
-        else:
-            print(f"[LTE ✗] Pico reported failure: {result.get('error', '?')}")
-            return False
+        print("[LTE ✗] Timed out waiting for response.")
+        return False
 
     except Exception as ex:
         print(f"[LTE ✗] Serial error: {ex}")
@@ -240,11 +269,12 @@ def main() -> None:
         # Pico resets that would occur if we opened/closed it per transmission.
         try:
             pico_ser = serial.Serial(PICO_PORT, PICO_BAUD, timeout=PICO_TIMEOUT_SEC)
-            time.sleep(2)  # allow Pico to finish any boot reset
-            print(f"[INFO] PicoLTE connected on {PICO_PORT}.")
+            if not wait_for_pico_ready(pico_ser):
+                print("[WARN] Pico not ready — LTE unavailable.")
+                pico_ser.close()
+                pico_ser = None
         except Exception as ex:
             print(f"[WARN] Could not open PicoLTE on {PICO_PORT}: {ex}")
-            print("[WARN] LTE fallback unavailable — WiFi only.")
             pico_ser = None
 
         print(f"\n[INFO] Window: {READ_WINDOW_SECS}s | "

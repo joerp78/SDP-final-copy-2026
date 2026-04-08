@@ -12,7 +12,7 @@ import json
 import time
 import serial
 
-PICO_PORT     = "/dev/ttyACM1"
+PICO_PORT     = "/dev/ttyACM0"
 PICO_BAUD     = 115200
 TIMEOUT       = 30        # seconds to wait for each response
 
@@ -41,6 +41,26 @@ def read_lines_for(ser: serial.Serial, seconds: float):
                 lines.append(line)
     return lines
 
+def wait_for_ready(ser, timeout=120):
+    print(f"[TEST] Waiting up to {timeout}s for Pico ready signal...")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        raw = ser.readline()
+        if not raw:
+            continue
+        line = raw.decode('utf-8', errors='replace').strip()
+        if not line:
+            continue
+        print(f"  [PICO →] {line}")
+        try:
+            msg = json.loads(line)
+            if msg.get("status") == "ready":
+                print("  ✓ Pico is ready")
+                return True
+        except json.JSONDecodeError:
+            pass  
+    return False
+
 
 def main():
     print(f"[TEST] Opening {PICO_PORT} at {PICO_BAUD} baud...")
@@ -52,22 +72,7 @@ def main():
 
     print("[TEST] Port opened. Waiting 5s for Pico to boot and print startup messages...\n")
 
-    # ── Phase 1: Read everything the Pico prints during boot ─────────────────
-    print("── Phase 1: Boot output ─────────────────────────────────────────────")
-    boot_lines = read_lines_for(ser, 5)
-
-    ready_seen = any(
-        "ready" in l.lower() for l in boot_lines
-    )
-    print(f"\n  → {'✓ Ready signal seen' if ready_seen else '✗ No ready signal — Pico may still be booting or crashed'}")
-
-    # ── Phase 2: Wait a bit longer if not ready yet ───────────────────────────
-    if not ready_seen:
-        print("\n[TEST] Waiting an additional 60s for LTE init...")
-        more_lines = read_lines_for(ser, 60)
-        boot_lines += more_lines
-        ready_seen = any("ready" in l.lower() for l in boot_lines)
-        print(f"  → {'✓ Ready signal seen' if ready_seen else '✗ Still no ready signal'}")
+    wait_for_ready(ser)
 
     # ── Phase 3: Send test payload ────────────────────────────────────────────
     print("\n── Phase 2: Sending test payload ────────────────────────────────────")
