@@ -1,7 +1,13 @@
 import sys
 import time
-import ujson                       # MicroPython's native JSON — avoids JSONDecodeError issue
+import ujson
 
+DEBUG = True  #Set True only when connected via mpremote for debugging
+
+
+def log(msg):
+    if DEBUG:
+        sys.stderr.write(msg + "\n")
 
 def respond(success, error=None):
     if success:
@@ -9,76 +15,78 @@ def respond(success, error=None):
     else:
         msg = str(error).replace('"', "'") if error else "Unknown error"
         sys.stdout.write('{"success": false, "error": "' + msg + '"}\n')
-    # No flush() — MicroPython stdout is unbuffered
 
 
 def initialize_lte():
-    print("=== Initializing Sixfab Pico LTE ===")
+    log("=== Initializing Sixfab Pico LTE ===")
     try:
         from pico_lte.core import PicoLTE
         pico_lte = PicoLTE()
     except Exception as e:
-        print(f"✗ Failed to import or create PicoLTE: {e}")
+        log(f"✗ Failed to import or create PicoLTE: {e}")
         return None
 
     try:
         pico_lte.network.register_network()
-    except Exception as e:
-        print(f"✗ register_network (1) failed: {e}")
-
-    try:
         pico_lte.http.set_context_id()
-    except Exception as e:
-        print(f"✗ set_context_id failed: {e}")
-
-    try:
         pico_lte.network.get_pdp_ready()
     except Exception as e:
-        print(f"✗ get_pdp_ready failed: {e}")
+        log(f"✗ Network setup failed: {e}")
+        return None
+
+    try:
+        pico_lte.atcom.send_at_comm('AT+QHTTPCFG="sslctxid",1')
+        pico_lte.atcom.send_at_comm('AT+QSSLCFG="sslversion",1,4')
+        pico_lte.atcom.send_at_comm('AT+QSSLCFG="ciphersuite",1,0xFFFF')
+        pico_lte.atcom.send_at_comm('AT+QSSLCFG="seclevel",1,0')
+        pico_lte.atcom.send_at_comm('AT+QSSLCFG="sni",1,1')
+        log("✓ SSL configured")
+    except Exception as e:
+        log(f"✗ SSL config failed: {e}")
+        return None
 
     try:
         result = pico_lte.network.register_network()
         if result:
-            print("✓ Registered to network")
+            log("✓ Registered to network")
             return pico_lte
         else:
-            print("✗ register_network (2) returned False")
+            log("✗ register_network returned False")
             return None
     except Exception as e:
-        print(f"✗ register_network (2) failed: {e}")
+        log(f"✗ register_network failed: {e}")
         return None
 
 
 def main():
-    print("=== PicoLTE RFID Relay ===")
+    log("=== PicoLTE RFID Relay ===")
 
     try:
         from data.json_parser import JSONParser
         from services.api_client import APIClient
         imports_ok = True
     except Exception as e:
-        print(f"✗ Import error: {e}")
+        log(f"✗ Import error: {e}")
         imports_ok = False
 
     pico_lte = initialize_lte()
     if not pico_lte:
-        print("✗ LTE unavailable — will respond with errors.")
+        log("✗ LTE unavailable — will respond with errors.")
 
     if imports_ok and pico_lte:
         try:
             api    = APIClient(pico_lte)
             parser = JSONParser()
         except Exception as e:
-            print(f"✗ Failed to create API/parser: {e}")
+            log(f"✗ Failed to create API/parser: {e}")
             api    = None
             parser = None
     else:
         api    = None
         parser = None
 
-    print("✓ Ready. Broadcasting ready signal until first message...")
+    log("✓ Ready. Broadcasting ready signal until first message...")
 
-    # ── Broadcast ready using uselect for non-blocking stdin reads ────────────
     import uselect
     poller = uselect.poll()
     poller.register(sys.stdin, uselect.POLLIN)
@@ -86,20 +94,25 @@ def main():
     first_line = None
     while True:
         sys.stdout.write('{"status": "ready"}\n')
-        # Poll for incoming data — 3 second timeout (milliseconds)
         events = poller.poll(3000)
         if events:
-            first_line = sys.stdin.readline()
-            if first_line and first_line.strip():
-                break   # got real data — exit ready loop
+            candidate = sys.stdin.readline()
+            if candidate:
+                stripped = candidate.strip()
+                # Only break if it looks like real JSON payload
+                if stripped.startswith('[') or stripped.startswith('{'):
+                    try:
+                        ujson.loads(stripped)  # validate it's actually parseable
+                        first_line = candidate
+                        break
+                    except ValueError:
+                        log(f"[WARN] Ignoring non-JSON input: {repr(stripped[:40])}")
 
-    print("✓ Listening for JSON data on serial...")
+    log("✓ Listening for JSON data on serial...")
 
-    # Process the first line that broke us out of the ready loop
     if first_line and first_line.strip():
         _handle_line(first_line, api, parser)
 
-    # ── Main listen loop ──────────────────────────────────────────────────────
     while True:
         try:
             line = sys.stdin.readline()
@@ -111,16 +124,13 @@ def main():
                 continue
             _handle_line(line, api, parser)
         except Exception as e:
-            print(f"[ERROR] {e}")
+            log(f"[ERROR] {e}")
             respond(False, str(e))
 
 
 def _handle_line(line, api, parser):
-    """Process one received line — shared by ready loop and main loop."""
     line = line.replace('\r', '').replace('\n', '').strip()
 
-    # ── Strip any garbage prepended by MicroPython REPL echo ─────────────────
-    # Find the first JSON character — either '[' for an array or '{' for an object
     json_start = -1
     for i, ch in enumerate(line):
         if ch in ('[', '{'):
@@ -128,16 +138,16 @@ def _handle_line(line, api, parser):
             break
 
     if json_start == -1:
-        print(f"[WARN] No JSON found in line: {repr(line[:80])}")
+        log(f"[WARN] No JSON found in line: {repr(line[:80])}")
         respond(False, "No JSON found in received data")
         return
 
     if json_start > 0:
-        print(f"[WARN] Stripped {json_start} garbage byte(s): {repr(line[:json_start])}")
+        log(f"[WARN] Stripped {json_start} garbage byte(s): {repr(line[:json_start])}")
         line = line[json_start:]
 
-    print(f"[RX] {len(line)} byte(s)")
-    print(f"[RX RAW] {repr(line[:80])}")
+    log(f"[RX] {len(line)} byte(s)")
+    log(f"[RX RAW] {repr(line[:80])}")
 
     if api is None or parser is None:
         respond(False, "LTE or parser not available")
@@ -150,15 +160,15 @@ def _handle_line(line, api, parser):
         else:
             events = [_parse_event(data)]
 
-        print(f"[INFO] Parsed {len(events)} event(s) — sending via LTE...")
+        log(f"[INFO] Parsed {len(events)} event(s) — sending via LTE...")
         success = api.send_events(events)
         respond(success, None if success else "API call failed")
 
     except ValueError as e:
-        print(f"[ERROR] JSON parse failed: {e}")
+        log(f"[ERROR] JSON parse failed: {e}")
         respond(False, f"JSON parse failed: {e}")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        log(f"[ERROR] {e}")
         respond(False, str(e))
 
 
@@ -176,7 +186,7 @@ def _parse_event(event):
 try:
     main()
 except Exception as e:
-    print(f"[FATAL] {e}")
+    log(f"[FATAL] {e}")
     while True:
         try:
             sys.stdin.readline()
