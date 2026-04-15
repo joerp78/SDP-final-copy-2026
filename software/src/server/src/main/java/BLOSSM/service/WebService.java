@@ -1,21 +1,21 @@
-package rfid.service;
+package BLOSSM.service;
 
-import rfid.model.RFIDEvent;
+import BLOSSM.model.RFIDReading;
 import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
-public class RFIDEventService {
-    private final Map<Long, RFIDEvent> events = new LinkedHashMap<>();
+public class WebService {
+    private final Map<Long, RFIDReading> events = new LinkedHashMap<>();
     private final AtomicLong idGen = new AtomicLong(1);
 
-    public List<RFIDEvent> saveAll(List<RFIDEvent> incomingEvents) {
-        List<RFIDEvent> saved = new ArrayList<>();
+    public List<RFIDReading> saveAll(List<RFIDReading> incomingEvents) {
+        List<RFIDReading> saved = new ArrayList<>();
 
-        for (RFIDEvent event : incomingEvents) {
+        for (RFIDReading event : incomingEvents) {
             Long id = idGen.getAndIncrement();
-            RFIDEvent withId = new RFIDEvent(id, event.timestamp(), event.eventType(),
+            RFIDReading withId = new RFIDReading(id, event.timestamp(), event.eventType(),
                     event.epc(), event.userMemory(), event.rssi(), event.antennaId());
             events.put(id, withId);
             saved.add(withId);
@@ -24,7 +24,7 @@ public class RFIDEventService {
         return saved;
     }
 
-    public List<RFIDEvent> findAll() {
+    public List<RFIDReading> findAll() {
         return new ArrayList<>(events.values());
     }
 }

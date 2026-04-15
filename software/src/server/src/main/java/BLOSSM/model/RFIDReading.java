@@ -1,6 +1,6 @@
-package rfid.model;
+package BLOSSM.model;
 
-public record RFIDEvent(
+public record RFIDReading(
         Long id,
         String timestamp,
         String eventType,
