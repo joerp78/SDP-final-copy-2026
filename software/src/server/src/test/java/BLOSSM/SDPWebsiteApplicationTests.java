@@ -1,10 +1,10 @@
-package rfid;
+package BLOSSM;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class RFIDApplicationTests {
+class SDPWebsiteApplicationTests {
 
 	@Test
 	void contextLoads() {

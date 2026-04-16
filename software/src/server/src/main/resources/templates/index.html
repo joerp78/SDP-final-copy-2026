@@ -1,59 +1,796 @@
-<!doctype html>
+<!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="utf-8"/>
-    <title>RFID Events Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>BLOSSM — Plant Health Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
-        body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:20px;background:#f6f8fb}
-        .wrap{max-width:1200px;margin:0 auto}
-        h1{color:#1f2937;margin-bottom:10px}
-        .count{color:#6b7280;font-size:0.95rem;margin-bottom:25px}
-        table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
-        th,td{padding:12px;border-bottom:1px solid #eee;text-align:left}
-        th{background:#f9fafb;font-weight:600;color:#374151}
-        .muted{color:#9ca3af;font-size:0.9rem}
-        .enter{color:#16a34a;font-weight:600}
-        .leave{color:#dc2626;font-weight:600}
-        .epc{font-family:monospace;font-size:0.85rem;color:#4b5563}
-        tr:hover{background:#f9fafb}
+        /* ══════════════════════════════════════════════
+           BLOSSM Dashboard — Variables & Reset
+           ══════════════════════════════════════════════ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #f0f4f1;
+            --card: #ffffff;
+            --primary: #2d6a4f;
+            --primary-dark: #1b4332;
+            --primary-light: #40916c;
+            --accent: #95d5b2;
+            --accent-light: #d8f3dc;
+            --text: #1b4332;
+            --text-secondary: #52796f;
+            --text-muted: #8faba1;
+            --border: #d8e4dd;
+            --temp: #e07a5f;
+            --moisture: #457b9d;
+            --conductivity: #e9c46a;
+            --light-color: #f4a261;
+            --humidity-color: #2a9d8f;
+            --healthy: #40916c;
+            --warning: #e9a820;
+            --critical: #d64045;
+            --shadow: 0 2px 12px rgba(27,67,50,0.08);
+            --shadow-lg: 0 8px 30px rgba(27,67,50,0.12);
+            --radius: 16px;
+            --radius-sm: 10px;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        /* ─── Banner ─────────────────────────────── */
+        .banner {
+            background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 40%, #40916c 100%);
+            color: #fff;
+            padding: 20px 32px;
+            box-shadow: 0 4px 24px rgba(27,67,50,0.25);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .banner-inner {
+            max-width: 1280px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .banner-left { display: flex; align-items: center; gap: 16px; }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .logo svg { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
+        .logo-text {
+            font-size: 1.75rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+        }
+        .banner-subtitle {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            font-weight: 400;
+        }
+        .banner-badges { display: flex; gap: 12px; }
+        .banner-badge {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 50px;
+            padding: 6px 16px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .live-dot {
+            width: 8px; height: 8px;
+            background: #95d5b2;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.4; transform: scale(1.6); }
+        }
+
+        /* ─── Main Container ─────────────────────── */
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 28px 24px 60px;
+        }
+
+        /* ─── Hub Metrics Strip ──────────────────── */
+        .hub-section {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px 32px;
+            margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+            border-left: 5px solid var(--primary);
+        }
+        .hub-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .hub-title small {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-transform: none;
+            letter-spacing: 0;
+            margin-top: 2px;
+        }
+        .hub-metrics { display: flex; gap: 40px; flex-wrap: wrap; }
+        .hub-metric { display: flex; align-items: center; gap: 12px; }
+        .hub-metric-icon {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hub-metric-icon.light   { background: #fef3e2; color: var(--light-color); }
+        .hub-metric-icon.humidity { background: #e6f5f0; color: var(--humidity-color); }
+        .hub-metric-info .hub-metric-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .hub-metric-info .hub-metric-label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* ─── Controls Row ───────────────────────── */
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        .toggle-wrap {
+            display: inline-flex;
+            background: var(--border);
+            border-radius: 50px;
+            padding: 4px;
+        }
+        .toggle-btn {
+            padding: 8px 22px;
+            border: none;
+            border-radius: 50px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-family: inherit;
+        }
+        .toggle-btn.active {
+            background: var(--primary);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(45,106,79,0.3);
+        }
+        .toggle-btn:hover:not(.active) { color: var(--primary); }
+
+        /* ─── Plant Cards Grid (Overview) ────────── */
+        .plant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .plant-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+        .plant-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+        .card-status-bar {
+            height: 4px;
+            background: var(--border);
+        }
+        .card-status-bar.healthy  { background: var(--healthy); }
+        .card-status-bar.warning  { background: var(--warning); }
+        .card-status-bar.critical { background: var(--critical); }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 20px 20px 0;
+        }
+        .plant-avatar {
+            width: 50px; height: 50px;
+            border-radius: 14px;
+            background: var(--accent-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .plant-avatar svg { width: 28px; height: 28px; }
+        .card-header-text h3 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+        .status-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 2px 10px;
+            border-radius: 50px;
+        }
+        .status-badge.healthy  { background: #d8f3dc; color: #1b4332; }
+        .status-badge.warning  { background: #fef3cd; color: #856404; }
+        .status-badge.critical { background: #f8d7da; color: #721c24; }
+
+        .card-metrics {
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1;
+        }
+        .metric-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .metric-icon {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .metric-icon svg { width: 16px; height: 16px; }
+        .metric-icon.temp         { background: #fce8e2; color: var(--temp); }
+        .metric-icon.moisture     { background: #dfeef7; color: var(--moisture); }
+        .metric-icon.conductivity { background: #fdf5e0; color: var(--conductivity); }
+        .metric-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            flex: 1;
+        }
+        .metric-value {
+            font-size: 0.95rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+        .card-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .card-footer .view-link {
+            color: var(--primary);
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .card-footer .view-link:hover { text-decoration: underline; }
+
+        /* ─── Detailed View ──────────────────────── */
+        .detailed-section { display: none; }
+        .detailed-section.active { display: block; }
+        .overview-section.hidden { display: none; }
+
+        .chart-group {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .chart-group-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .chart-group-header h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chart-group-header a {
+            font-size: 0.8rem;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .chart-group-header a:hover { text-decoration: underline; }
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .chart-card {
+            background: var(--bg);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+        }
+        .chart-card h4 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chart-card h4 .dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .chart-wrap { position: relative; height: 200px; }
+
+        /* ─── Hub Charts ─────────────────────────── */
+        .hub-charts-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        /* ─── Empty State ────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+        .empty-state svg { margin-bottom: 16px; opacity: 0.4; }
+        .empty-state h3  { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 6px; }
+        .empty-state p   { font-size: 0.9rem; }
+
+        /* ─── Responsive ─────────────────────────── */
+        @media (max-width: 768px) {
+            .banner { padding: 16px 18px; }
+            .logo-text { font-size: 1.3rem; }
+            .banner-badges { width: 100%; }
+            .container { padding: 18px 14px 40px; }
+            .hub-section { padding: 18px 20px; flex-direction: column; align-items: flex-start; }
+            .hub-metrics { gap: 24px; }
+            .plant-grid { grid-template-columns: 1fr; }
+            .charts-row { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-<div class="wrap">
-    <h1>RFID Event Monitor</h1>
-    <p class="count">Total Events: <strong th:text="${#lists.size(events)}">0</strong></p>
 
-    <table>
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Timestamp</th>
-            <th>Event Type</th>
-            <th>EPC</th>
-            <th>RSSI</th>
-            <th>Antenna</th>
-            <th>User Memory</th>
-	    <th>Temperature (C)</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr th:each="event : ${events}">
-            <td th:text="${event.id()}">1</td>
-            <td th:text="${event.timestamp()}">2025-11-17...</td>
-            <td th:class="${event.eventType() == 'ENTER' ? 'enter' : 'leave'}"th:text="${event.eventType()}">ENTER</td>
-            <td class="epc" th:text="${event.epc()}">DEADBEEF...</td>
-            <td th:text="${event.rssi() != null ? event.rssi() + ' dBm' : '-'}">-57 dBm</td>
-            <td th:text="${event.antennaId() != null ? event.antennaId() : '-'}">1</td>
-            <td class="epc" th:text="${event.userMemory() != null ? event.userMemory() : '-'}">0000...</td>
-            <td th:text="${event.temperatureC != null ? event.temperatureC : '-'}">-</td>
-	</tr>
-        <tr th:if="${#lists.isEmpty(events)}">
-            <td colspan="7" class="muted" style="text-align:center;padding:30px">
-                No events recorded yet. Waiting for Pi data...
-            </td>
-        </tr>
-        </tbody>
-    </table>
-</div>
+<!-- ════════════════════ BANNER ════════════════════ -->
+<header class="banner">
+    <div class="banner-inner">
+        <div class="banner-left">
+            <div class="logo">
+                <!-- Flower / blossom SVG icon -->
+                <svg viewBox="0 0 40 40" width="40" height="40" fill="none">
+                    <circle cx="20" cy="11" r="7" fill="rgba(255,255,255,0.85)"/>
+                    <circle cx="28" cy="17" r="7" fill="rgba(255,255,255,0.65)"/>
+                    <circle cx="25" cy="27" r="7" fill="rgba(255,255,255,0.50)"/>
+                    <circle cx="15" cy="27" r="7" fill="rgba(255,255,255,0.50)"/>
+                    <circle cx="12" cy="17" r="7" fill="rgba(255,255,255,0.65)"/>
+                    <circle cx="20" cy="20" r="5.5" fill="#f4a261"/>
+                    <circle cx="20" cy="20" r="2.5" fill="#e07a5f"/>
+                </svg>
+                <div>
+                    <div class="logo-text">BLOSSM</div>
+                    <div class="banner-subtitle">Plant Health Monitoring</div>
+                </div>
+            </div>
+        </div>
+        <div class="banner-badges">
+            <div class="banner-badge">
+                <span class="live-dot"></span>
+                System Online
+            </div>
+            <div class="banner-badge">
+                <strong th:text="${#lists.size(plants)}">0</strong>&nbsp;Plants Tracked
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- ════════════════════ MAIN CONTENT ════════════════════ -->
+<main class="container">
+
+    <!-- ─── Hub Metrics ─── -->
+    <section class="hub-section" th:if="${hub != null}">
+        <div>
+            <div class="hub-title">
+                Hub Environment
+                <small th:text="'Last reading: ' + ${hub.lastUpdated}">Last reading: 2 min ago</small>
+            </div>
+        </div>
+        <div class="hub-metrics">
+            <div class="hub-metric">
+                <div class="hub-metric-icon light">
+                    <!-- Sun icon -->
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1"  x2="12" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1"  y1="12" x2="3"  y2="12"/>
+                        <line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                </div>
+                <div class="hub-metric-info">
+                    <div class="hub-metric-value">
+                        <span th:text="${hub.light != null ? hub.light + ' lux' : '—'}">850 lux</span>
+                    </div>
+                    <div class="hub-metric-label">Light Level</div>
+                </div>
+            </div>
+            <div class="hub-metric">
+                <div class="hub-metric-icon humidity">
+                    <!-- Water drop icon -->
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0L12 2.69z"/>
+                    </svg>
+                </div>
+                <div class="hub-metric-info">
+                    <div class="hub-metric-value">
+                        <span th:text="${hub.humidity != null ? hub.humidity + '%' : '—'}">62%</span>
+                    </div>
+                    <div class="hub-metric-label">Humidity</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── Controls Row ─── -->
+    <div class="controls">
+        <h2 class="section-title">Your Plants</h2>
+        <div class="toggle-wrap">
+            <button class="toggle-btn active" id="btnOverview"
+                    onclick="setView('overview')">Overview</button>
+            <button class="toggle-btn" id="btnDetailed"
+                    onclick="setView('detailed')">Detailed</button>
+        </div>
+    </div>
+
+    <!-- ═══════════ OVERVIEW MODE ═══════════ -->
+    <section class="overview-section" id="overviewSection">
+
+        <!-- Plant cards grid -->
+        <div class="plant-grid" th:if="${not #lists.isEmpty(plants)}">
+            <a th:each="plant : ${plants}"
+               th:href="@{/plants/{id}(id=${plant.id})}"
+               class="plant-card">
+
+                <!-- Status colour bar at top of card -->
+                <div class="card-status-bar"
+                     th:classappend="${plant.status}"></div>
+
+                <!-- Card header: avatar + name + badge -->
+                <div class="card-header">
+                    <div class="plant-avatar">
+                        <!-- Simple sprout / leaf icon -->
+                        <svg viewBox="0 0 32 32" fill="none">
+                            <path d="M16 28V15" stroke="#2d6a4f" stroke-width="2.5"
+                                  stroke-linecap="round"/>
+                            <path d="M16 20c-5-2-9-9-7-14 5 3 8 8 7 14z" fill="#74c69d"/>
+                            <path d="M16 16c5-2 9-9 7-14-5 3-8 8-7 14z" fill="#40916c"/>
+                        </svg>
+                    </div>
+                    <div class="card-header-text">
+                        <h3 th:text="${plant.name}">Plant 1</h3>
+                        <span class="status-badge"
+                              th:classappend="${plant.status}"
+                              th:text="${plant.status}">Healthy</span>
+                    </div>
+                </div>
+
+                <!-- Metrics -->
+                <div class="card-metrics">
+                    <!-- Temperature -->
+                    <div class="metric-row">
+                        <div class="metric-icon temp">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M14 14.76V3.5a2 2 0 1 0-4 0v11.26a4.5 4.5 0 1 0 4 0z"/>
+                            </svg>
+                        </div>
+                        <span class="metric-label">Temperature</span>
+                        <span class="metric-value"
+                              th:text="${plant.temperature != null
+                                        ? #numbers.formatDecimal(plant.temperature,1,1) + ' °C'
+                                        : '—'}">22.5 °C</span>
+                    </div>
+                    <!-- Soil Moisture -->
+                    <div class="metric-row">
+                        <div class="metric-icon moisture">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0L12 2.69z"/>
+                            </svg>
+                        </div>
+                        <span class="metric-label">Soil Moisture</span>
+                        <span class="metric-value"
+                              th:text="${plant.soilMoisture != null
+                                        ? #numbers.formatDecimal(plant.soilMoisture,1,1) + ' %'
+                                        : '—'}">45.0 %</span>
+                    </div>
+                    <!-- Soil Conductivity -->
+                    <div class="metric-row">
+                        <div class="metric-icon conductivity">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                            </svg>
+                        </div>
+                        <span class="metric-label">Conductivity</span>
+                        <span class="metric-value"
+                              th:text="${plant.soilConductivity != null
+                                        ? #numbers.formatDecimal(plant.soilConductivity,1,2) + ' µS/cm'
+                                        : '—'}">1.20 µS/cm</span>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="card-footer">
+                    <span th:text="'Updated ' + ${plant.lastUpdated}">Updated 2 min ago</span>
+                    <span class="view-link">Details →</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- Empty state -->
+        <div class="empty-state" th:if="${#lists.isEmpty(plants)}">
+            <svg viewBox="0 0 64 64" width="64" height="64" fill="none">
+                <path d="M32 56V28" stroke="#8faba1" stroke-width="3" stroke-linecap="round"/>
+                <path d="M32 40c-8-4-16-14-12-24 8 4 14 12 12 24z" fill="#d8e4dd"/>
+                <path d="M32 32c8-4 16-14 12-24-8 4-14 12-12 24z" fill="#c1d9cc"/>
+            </svg>
+            <h3>No Plants Registered</h3>
+            <p>Connect your first sensor node to start monitoring.</p>
+        </div>
+    </section>
+
+    <!-- ═══════════ DETAILED MODE ═══════════ -->
+    <section class="detailed-section" id="detailedSection">
+
+        <!-- Hub historical charts -->
+        <div class="chart-group" th:if="${hub != null}">
+            <div class="chart-group-header">
+                <h3>
+                    <span style="font-size:1.2em;">📡</span> Hub Environment — Over Time
+                </h3>
+            </div>
+            <div class="hub-charts-row">
+                <div class="chart-card">
+                    <h4><span class="dot" style="background:var(--light-color)"></span> Light Level</h4>
+                    <div class="chart-wrap"><canvas id="hubLightChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h4><span class="dot" style="background:var(--humidity-color)"></span> Humidity</h4>
+                    <div class="chart-wrap"><canvas id="hubHumidityChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Per-plant chart groups -->
+        <div th:each="plant : ${plants}" class="chart-group">
+            <div class="chart-group-header">
+                <h3>
+                    <svg viewBox="0 0 32 32" width="22" height="22" fill="none"
+                         style="vertical-align:middle">
+                        <path d="M16 28V15" stroke="#2d6a4f" stroke-width="2.5"
+                              stroke-linecap="round"/>
+                        <path d="M16 20c-5-2-9-9-7-14 5 3 8 8 7 14z" fill="#74c69d"/>
+                        <path d="M16 16c5-2 9-9 7-14-5 3-8 8-7 14z" fill="#40916c"/>
+                    </svg>
+                    <span th:text="${plant.name}">Plant 1</span>
+                </h3>
+                <a th:href="@{/plants/{id}(id=${plant.id})}">View full details →</a>
+            </div>
+            <div class="charts-row">
+                <div class="chart-card">
+                    <h4><span class="dot" style="background:var(--temp)"></span> Temperature</h4>
+                    <div class="chart-wrap">
+                        <canvas th:id="'tempChart-' + ${plant.id}"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h4><span class="dot" style="background:var(--moisture)"></span> Soil Moisture</h4>
+                    <div class="chart-wrap">
+                        <canvas th:id="'moistureChart-' + ${plant.id}"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h4><span class="dot" style="background:var(--conductivity)"></span> Conductivity</h4>
+                    <div class="chart-wrap">
+                        <canvas th:id="'conductivityChart-' + ${plant.id}"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- ════════════════════ SCRIPTS ════════════════════ -->
+<script th:inline="javascript">
+    /*
+     * ── Data from the backend ──────────────────────
+     *
+     * plantDataJson shape:
+     * {
+     *   "1": {
+     *     "labels":           ["12:00","12:05","12:10", ...],
+     *     "temperature":      [22.5, 23.0, 22.8, ...],
+     *     "soilMoisture":     [45.0, 46.2, 44.8, ...],
+     *     "soilConductivity": [1.20, 1.31, 1.18, ...]
+     *   },
+     *   "2": { ... }
+     * }
+     *
+     * hubDataJson shape:
+     * {
+     *   "labels":   ["12:00","12:05","12:10", ...],
+     *   "light":    [850, 900, 870, ...],
+     *   "humidity":  [55.0, 56.2, 54.8, ...]
+     * }
+     */
+    const plantData = /*[[${plantDataJson}]]*/ {};
+    const hubData   = /*[[${hubDataJson}]]*/   {};
+
+    /* ── View toggle ─────────────────────────────── */
+    let chartsBuilt = false;
+
+    function setView(mode) {
+        const ov = document.getElementById('overviewSection');
+        const dt = document.getElementById('detailedSection');
+        const btnO = document.getElementById('btnOverview');
+        const btnD = document.getElementById('btnDetailed');
+
+        if (mode === 'overview') {
+            ov.classList.remove('hidden');
+            ov.style.display = '';
+            dt.classList.remove('active');
+            dt.style.display = 'none';
+            btnO.classList.add('active');
+            btnD.classList.remove('active');
+        } else {
+            ov.classList.add('hidden');
+            ov.style.display = 'none';
+            dt.classList.add('active');
+            dt.style.display = 'block';
+            btnO.classList.remove('active');
+            btnD.classList.add('active');
+
+            /* Lazy-build charts on first switch */
+            if (!chartsBuilt) {
+                buildAllCharts();
+                chartsBuilt = true;
+            }
+        }
+    }
+
+    /* ── Chart factory ───────────────────────────── */
+    function buildChart(canvasId, labels, data, color, label, unit) {
+        const el = document.getElementById(canvasId);
+        if (!el) return;
+        const ctx = el.getContext('2d');
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+        gradient.addColorStop(0, color + '40');   /* 25 % opacity */
+        gradient.addColorStop(1, color + '08');   /*  3 % opacity */
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    borderColor: color,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    borderWidth: 2.5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1b4332',
+                        titleFont: { size: 12 },
+                        bodyFont:  { size: 13, weight: '600' },
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(tip) { return tip.parsed.y + ' ' + unit; }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#8faba1', font: { size: 11 }, maxTicksLimit: 8 }
+                    },
+                    y: {
+                        grid: { color: '#e8eeea' },
+                        ticks: { color: '#8faba1', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ── Build every chart on the page ───────────── */
+    function buildAllCharts() {
+        /* Hub charts */
+        if (hubData && hubData.labels) {
+            buildChart('hubLightChart',    hubData.labels, hubData.light,
+                       '#f4a261', 'Light', 'lux');
+            buildChart('hubHumidityChart', hubData.labels, hubData.humidity,
+                       '#2a9d8f', 'Humidity', '%');
+        }
+
+        /* Plant charts */
+        Object.keys(plantData).forEach(function(pid) {
+            var d = plantData[pid];
+            buildChart('tempChart-'         + pid, d.labels, d.temperature,
+                       '#e07a5f', 'Temperature',  '°C');
+            buildChart('moistureChart-'     + pid, d.labels, d.soilMoisture,
+                       '#457b9d', 'Soil Moisture', '%');
+            buildChart('conductivityChart-' + pid, d.labels, d.soilConductivity,
+                       '#e9c46a', 'Conductivity',  'µS/cm');
+        });
+    }
+</script>
 </body>
 </html>
