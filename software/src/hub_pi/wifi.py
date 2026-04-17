@@ -1,5 +1,18 @@
+#!/usr/bin/env python3
+"""
+wifi.py
+Sends event payloads to the server over HTTP (WiFi/Ethernet).
+"""
+
+from typing import List
+
+import requests
+
+from config import API_URL, API_TIMEOUT_SEC
+
+
 def send_events_wifi(events: List[dict]) -> bool:
-    """POST events to the server over WiFi."""
+    """POST *events* as JSON to the API endpoint."""
     try:
         response = requests.post(API_URL, json=events, timeout=API_TIMEOUT_SEC)
         response.raise_for_status()
