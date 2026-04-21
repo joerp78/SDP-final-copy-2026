@@ -9,21 +9,27 @@ CMD_SRCS += \
 ../lnk_msp430fr2355.cmd 
 
 C_SRCS += \
+../em4325_spi.c \
 ../main.c 
 
 C_DEPS += \
+./em4325_spi.d \
 ./main.d 
 
 OBJS += \
+./em4325_spi.obj \
 ./main.obj 
 
 OBJS__QUOTED += \
+"em4325_spi.obj" \
 "main.obj" 
 
 C_DEPS__QUOTED += \
+"em4325_spi.d" \
 "main.d" 
 
 C_SRCS__QUOTED += \
+"../em4325_spi.c" \
 "../main.c" 
 
 
