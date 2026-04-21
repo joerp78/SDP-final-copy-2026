@@ -504,7 +504,7 @@
         <!-- Plant cards grid -->
         <div class="plant-grid" th:if="${not #lists.isEmpty(plants)}">
             <a th:each="plant : ${plants}"
-               th:href="@{/plants/{id}(id=${plant.id})}"
+               th:href="@{/plants/{id}(id=${plant.plantId})}"
                class="plant-card">
 
                 <!-- Status colour bar at top of card -->
@@ -628,7 +628,7 @@
                     </svg>
                     <span th:text="${plant.name}">Plant 1</span>
                 </h3>
-                <a th:href="@{/plants/{id}(id=${plant.id})}">View full details →</a>
+                <a th:href="@{/plants/{id}(id=${plant.plantId})}">View full details →</a>
             </div>
             <div class="charts-row">
                 <div class="chart-card">
