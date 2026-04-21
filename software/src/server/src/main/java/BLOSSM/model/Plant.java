@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "plant_readings", indexes = {
-        @Index(name = "idx_plant_id", columnList = "plantId"),
+        @Index(name = "idx_plant_id",        columnList = "plantId"),
         @Index(name = "idx_plant_timestamp", columnList = "plantId, timestamp")
 })
 public class Plant {
@@ -16,45 +16,46 @@ public class Plant {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @JsonIgnore                       // hide the internal row PK from JSON
+    @JsonIgnore
     private Long id;
 
     @Column(nullable = false)
-    private Long plantId;             // logical plant identifier — used in URLs
+    private Long plantId;
 
     @Column(nullable = false)
-    private String name;              // "Basil", "Tomato", etc.
+    private String name;
 
-    private Double temperature;       // °C
+    private Double temperature;       // deg C
     private Double soilMoisture;      // %
-    private Double soilConductivity;  // µS/cm
+    private Double soilConductivity;  // uS/cm
+    private Integer battery;          // mV
 
     @Column(nullable = false)
     private LocalDateTime timestamp;
 
     // ── Constructors ────────────────────────────────────
 
-    protected Plant() { }   // required by JPA
+    protected Plant() { }
 
-    /** Used when registering a brand-new plant (POST /api/plants) */
     public Plant(Long plantId, String name) {
         this.plantId = plantId;
         this.name    = name;
     }
 
-    /** Used when saving a sensor reading */
     public Plant(Long plantId, String name,
                  Double temperature, Double soilMoisture,
-                 Double soilConductivity, LocalDateTime timestamp) {
-        this.plantId           = plantId;
-        this.name              = name;
-        this.temperature       = temperature;
-        this.soilMoisture      = soilMoisture;
-        this.soilConductivity  = soilConductivity;
-        this.timestamp         = timestamp;
+                 Double soilConductivity, Integer battery,
+                 LocalDateTime timestamp) {
+        this.plantId          = plantId;
+        this.name             = name;
+        this.temperature      = temperature;
+        this.soilMoisture     = soilMoisture;
+        this.soilConductivity = soilConductivity;
+        this.battery          = battery;
+        this.timestamp        = timestamp;
     }
 
-    // ── Lifecycle callback ──────────────────────────────
+    // ── Lifecycle ───────────────────────────────────────
 
     @PrePersist
     protected void onCreate() {
@@ -63,30 +64,26 @@ public class Plant {
         }
     }
 
-    // ── Computed getters (NOT stored in DB) ─────────────
-    //    JPA uses field-based access (annotations are on fields),
-    //    so extra getters are invisible to Hibernate but visible
-    //    to Thymeleaf (${plant.status}) and Jackson (JSON).
+    // ── Computed getters ────────────────────────────────
 
-    /**
-     * Derives a health status from the latest sensor values.
-     * Adjust these thresholds to match your plants' needs.
-     */
     public String getStatus() {
         boolean hasCritical = false;
         boolean hasWarning  = false;
 
         if (temperature != null) {
-            if (temperature > 40 || temperature < 2)  hasCritical = true;
+            if (temperature > 40 || temperature < 2)    hasCritical = true;
             else if (temperature > 35 || temperature < 5) hasWarning = true;
         }
         if (soilMoisture != null) {
-            if (soilMoisture < 10 || soilMoisture > 90) hasCritical = true;
+            if (soilMoisture < 10 || soilMoisture > 90)   hasCritical = true;
             else if (soilMoisture < 20 || soilMoisture > 80) hasWarning = true;
         }
         if (soilConductivity != null) {
-            if (soilConductivity > 3.0) hasCritical = true;
+            if (soilConductivity > 3.0)      hasCritical = true;
             else if (soilConductivity > 2.0) hasWarning = true;
+        }
+        if (battery != null && battery < 3300) {  // below 3.3 V -> warn
+            hasWarning = true;
         }
 
         if (hasCritical) return "critical";
@@ -94,46 +91,42 @@ public class Plant {
         return "healthy";
     }
 
-    /**
-     * Human-friendly relative time string for the template.
-     */
     public String getLastUpdated() {
         if (timestamp == null) return "No data";
-
         long minutes = Duration.between(timestamp, LocalDateTime.now()).toMinutes();
-        if (minutes < 0)  return "Just now";        // clock skew guard
+        if (minutes < 0)  return "Just now";
         if (minutes < 1)  return "Just now";
         if (minutes < 60) return minutes + " min ago";
-
         long hours = minutes / 60;
         if (hours < 24) return hours + "h ago";
-
-        long days = hours / 24;
-        return days + "d ago";
+        return (hours / 24) + "d ago";
     }
 
-    // ── Standard getters & setters ──────────────────────
+    // ── Getters & setters ───────────────────────────────
 
-    public Long getId()                    { return id; }
-    public void setId(Long id)             { this.id = id; }
+    public Long getId()                          { return id; }
+    public void setId(Long id)                   { this.id = id; }
 
-    public Long getPlantId()               { return plantId; }
-    public void setPlantId(Long plantId)   { this.plantId = plantId; }
+    public Long getPlantId()                     { return plantId; }
+    public void setPlantId(Long plantId)         { this.plantId = plantId; }
 
-    public String getName()                { return name; }
-    public void setName(String name)       { this.name = name; }
+    public String getName()                      { return name; }
+    public void setName(String name)             { this.name = name; }
 
-    public Double getTemperature()                   { return temperature; }
-    public void setTemperature(Double temperature)   { this.temperature = temperature; }
+    public Double getTemperature()               { return temperature; }
+    public void setTemperature(Double v)         { this.temperature = v; }
 
-    public Double getSoilMoisture()                  { return soilMoisture; }
-    public void setSoilMoisture(Double soilMoisture) { this.soilMoisture = soilMoisture; }
+    public Double getSoilMoisture()              { return soilMoisture; }
+    public void setSoilMoisture(Double v)        { this.soilMoisture = v; }
 
-    public Double getSoilConductivity()                        { return soilConductivity; }
-    public void setSoilConductivity(Double soilConductivity)   { this.soilConductivity = soilConductivity; }
+    public Double getSoilConductivity()          { return soilConductivity; }
+    public void setSoilConductivity(Double v)    { this.soilConductivity = v; }
 
-    public LocalDateTime getTimestamp()                  { return timestamp; }
-    public void setTimestamp(LocalDateTime timestamp)     { this.timestamp = timestamp; }
+    public Integer getBattery()                  { return battery; }
+    public void setBattery(Integer battery)      { this.battery = battery; }
+
+    public LocalDateTime getTimestamp()          { return timestamp; }
+    public void setTimestamp(LocalDateTime ts)   { this.timestamp = ts; }
 
     @Override
     public String toString() {
@@ -142,6 +135,7 @@ public class Plant {
                 + ", temp=" + temperature
                 + ", moisture=" + soilMoisture
                 + ", conductivity=" + soilConductivity
+                + ", battery=" + battery + " mV"
                 + ", timestamp=" + timestamp + '}';
     }
 }
