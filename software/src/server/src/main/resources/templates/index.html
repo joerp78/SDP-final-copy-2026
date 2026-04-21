@@ -707,11 +707,12 @@
 
             /* Lazy-build charts on first switch */
             if (!chartsBuilt) {
-                buildAllCharts();
-                chartsBuilt = true;
+                requestAnimationFrame(function() {
+                    buildAllCharts();
+                    chartsBuilt = true;
+                });
             }
         }
-    }
 
     /* ── Chart factory ───────────────────────────── */
     function buildChart(canvasId, labels, data, color, label, unit) {
