@@ -634,19 +634,19 @@
                 <div class="chart-card">
                     <h4><span class="dot" style="background:var(--temp)"></span> Temperature</h4>
                     <div class="chart-wrap">
-                        <canvas th:id="'tempChart-' + ${plant.id}"></canvas>
+                        <canvas th:id="'tempChart-' + ${plant.plantId}"></canvas>
                     </div>
                 </div>
                 <div class="chart-card">
                     <h4><span class="dot" style="background:var(--moisture)"></span> Soil Moisture</h4>
                     <div class="chart-wrap">
-                        <canvas th:id="'moistureChart-' + ${plant.id}"></canvas>
+                        <canvas th:id="'moistureChart-' + ${plant.plantId}"></canvas>
                     </div>
                 </div>
                 <div class="chart-card">
                     <h4><span class="dot" style="background:var(--conductivity)"></span> Conductivity</h4>
                     <div class="chart-wrap">
-                        <canvas th:id="'conductivityChart-' + ${plant.id}"></canvas>
+                        <canvas th:id="'conductivityChart-' + ${plant.plantId}"></canvas>
                     </div>
                 </div>
             </div>
@@ -713,6 +713,7 @@
                 });
             }
         }
+    }
 
     /* ── Chart factory ───────────────────────────── */
     function buildChart(canvasId, labels, data, color, label, unit) {
