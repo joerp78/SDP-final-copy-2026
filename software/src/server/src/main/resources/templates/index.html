@@ -678,8 +678,8 @@
      *   "humidity":  [55.0, 56.2, 54.8, ...]
      * }
      */
-    const plantData = /*[[${plantDataJson}]]*/ {};
-    const hubData   = /*[[${hubDataJson}]]*/   {};
+    const plantData = JSON.parse(/*[[${plantDataJson}]]*/  '{}');
+    const hubData   = JSON.parse(/*[[${hubDataJson}]]*/    '{}');
 
     /* ── View toggle ─────────────────────────────── */
     let chartsBuilt = false;

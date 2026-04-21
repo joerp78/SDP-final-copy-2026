@@ -129,7 +129,7 @@
 <!-- ─── Banner ─── -->
 <header class="banner">
   <div class="banner-inner">
-    <a href="/" class="back-btn">← Dashboard</a>
+    <a href="/sdp" class="back-btn">← Dashboard</a>
     <span class="banner-plant-name" th:text="${plant.name}">Plant 1</span>
     <span class="banner-status"
           th:classappend="${plant.status}"
@@ -215,7 +215,7 @@
    *   "soilConductivity": [1.20, 1.31, ...]
    * }
    */
-  const readings = /*[[${readingsJson}]]*/ {};
+  const readings = JSON.parse(/*[[${readingsJson}]]*/ '{}');
 
   function buildChart(id, labels, data, color, label, unit) {
       const ctx = document.getElementById(id).getContext('2d');
