@@ -16,8 +16,9 @@ public class Hub {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Double light;       // lux
-    private Double humidity;    // %
+    private Double light;        // brightness % (0.0 - 100.0)
+    private Double humidity;     // %
+    private Double temperature;  // deg C
 
     @Column(nullable = false)
     private LocalDateTime timestamp;
@@ -26,10 +27,11 @@ public class Hub {
 
     protected Hub() { }
 
-    public Hub(Double light, Double humidity, LocalDateTime timestamp) {
-        this.light     = light;
-        this.humidity  = humidity;
-        this.timestamp = timestamp;
+    public Hub(Double light, Double humidity, Double temperature, LocalDateTime timestamp) {
+        this.light       = light;
+        this.humidity    = humidity;
+        this.temperature = temperature;
+        this.timestamp   = timestamp;
     }
 
     // ── Lifecycle callback ──────────────────────────────
@@ -59,23 +61,27 @@ public class Hub {
 
     // ── Standard getters & setters ──────────────────────
 
-    public Long getId()                { return id; }
-    public void setId(Long id)         { this.id = id; }
+    public Long getId()                              { return id; }
+    public void setId(Long id)                       { this.id = id; }
 
-    public Double getLight()               { return light; }
-    public void setLight(Double light)     { this.light = light; }
+    public Double getLight()                         { return light; }
+    public void setLight(Double light)               { this.light = light; }
 
-    public Double getHumidity()                { return humidity; }
-    public void setHumidity(Double humidity)   { this.humidity = humidity; }
+    public Double getHumidity()                      { return humidity; }
+    public void setHumidity(Double humidity)         { this.humidity = humidity; }
 
-    public LocalDateTime getTimestamp()              { return timestamp; }
-    public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
+    public Double getTemperature()                   { return temperature; }
+    public void setTemperature(Double temperature)   { this.temperature = temperature; }
+
+    public LocalDateTime getTimestamp()                         { return timestamp; }
+    public void setTimestamp(LocalDateTime timestamp)           { this.timestamp = timestamp; }
 
     @Override
     public String toString() {
         return "Hub{id=" + id
                 + ", light=" + light
                 + ", humidity=" + humidity
+                + ", temperature=" + temperature
                 + ", timestamp=" + timestamp + '}';
     }
 }
