@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 main.py
-Entry point for the RFID ↔ LTE gateway.
+Entry point for the RFID <-> LTE gateway.
 
 Run routine:
   1. Initialise ThingMagic 6e reader
   2. Open PicoLTE serial link
-  3. Loop: collect tags for a window → build events → send (WiFi / LTE)
+  3. Send one hub sensor reading (temperature, humidity, light)
+  4. Loop: collect tags for a window -> build events -> send (WiFi / LTE)
 
 Designed to be started automatically by the Pi on boot (see systemd unit).
 """
@@ -28,17 +29,19 @@ from config import (
     READ_WINDOW_SECS,
     REQUIRE_USER_MEMORY,
     USER_MEM_WORDS,
+    TEST_DATA,
 )
-from tm6e      import connect_reader, epc_to_str, read_user_memory, build_event
-from pico_lte  import open_pico_serial, send_events_lte
-from wifi       import send_events_wifi
+from tm6e         import connect_reader, epc_to_str, read_user_memory, build_event
+from pico_lte     import open_pico_serial, send_events_lte
+from wifi         import send_events_wifi
+from event_sender import send_rfid_events, send_hub_reading
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  GRACEFUL SHUTDOWN
 # ─────────────────────────────────────────────────────────────────────────────
 
-shutdown = Event()                      # thread-safe flag, replaces `_run` global
+shutdown = Event()                      # thread-safe flag
 
 
 def _on_signal(sig, _frame) -> None:
@@ -56,10 +59,7 @@ signal.signal(signal.SIGTERM, _on_signal)
 
 def send_with_fallback(events: List[dict],
                        pico_ser: Optional[serial.Serial]) -> bool:
-    """
-    WiFi first, LTE second.
-    If FORCE_LTE is True, skip WiFi entirely.
-    """
+    """WiFi first, LTE second.  If FORCE_LTE is True, skip WiFi entirely."""
     if not FORCE_LTE:
         if send_events_wifi(events):
             return True
@@ -75,6 +75,28 @@ def send_with_fallback(events: List[dict],
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _apply_filter(events: List[dict]) -> List[dict]:
+    """Apply REQUIRE_USER_MEMORY filter and log any suppressed events."""
+    if not REQUIRE_USER_MEMORY:
+        return events
+    filtered   = [e for e in events if e.get("userMemory")]
+    suppressed = len(events) - len(filtered)
+    if suppressed:
+        print(f"[INFO] {suppressed} event(s) suppressed — no user memory read.")
+    return filtered
+
+
+def _strip_user_memory_spaces(events: List[dict]) -> None:
+    """Remove whitespace from userMemory fields in-place (test JSON may have them)."""
+    for e in events:
+        if e.get("userMemory"):
+            e["userMemory"] = e["userMemory"].replace(" ", "")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -84,7 +106,8 @@ def main() -> None:
 
     try:
         # ── 1. Connect to RFID reader ─────────────────────────────────────
-        reader = connect_reader()
+        if not TEST_DATA:
+            reader = connect_reader()
 
         # ── 2. Connect to PicoLTE ─────────────────────────────────────────
         pico_ser = open_pico_serial(shutdown)
@@ -92,10 +115,46 @@ def main() -> None:
         print(f"\n[INFO] Window: {READ_WINDOW_SECS}s | "
               f"Tags: {len(ALLOWED_TAGS)} | "
               f"Force LTE: {FORCE_LTE} | "
-              f"Require user memory: {REQUIRE_USER_MEMORY}")
+              f"Require user memory: {REQUIRE_USER_MEMORY} | "
+              f"Test data: {TEST_DATA}")
         print("[INFO] Ctrl+C to stop.\n")
 
-        # ── 3. Main collection loop ───────────────────────────────────────
+        # ── 3. Send hub sensor reading ────────────────────────────────────
+        print("[INFO] ── Sampling hub sensors ──")
+        send_hub_reading(pico_ser)
+        print()
+
+        # ── 4a. TEST path — load events from JSON file and send once ──────
+        if TEST_DATA:
+            import json
+
+            print("[TEST] Loading events from test_data.json ...")
+            with open("test_data.json", "r") as f:
+                raw_events: List[dict] = json.load(f)
+
+            _strip_user_memory_spaces(raw_events)
+
+            now_iso = datetime.now().isoformat(timespec="milliseconds")
+            for e in raw_events:
+                e["timestamp"] = now_iso
+
+            print(f"[TEST] {len(raw_events)} event(s) loaded:")
+            for e in raw_events:
+                print(f"       EPC:{e.get('epc')}  "
+                      f"userMemory:{e.get('userMemory')}  "
+                      f"rssi:{e.get('rssi')}  "
+                      f"antenna:{e.get('antennaId')}")
+            print()
+
+            filtered = _apply_filter(raw_events)
+            if not filtered:
+                print("[INFO] No events passed filter.")
+            else:
+                send_rfid_events(filtered, pico_ser)
+            print()
+            return                          # exit cleanly after one test send
+
+        # ── 4b. LIVE path — continuous read / send loop ───────────────────
         while not shutdown.is_set():
             window_start = time.time()
             unique_tags: Dict[str, dict] = {}
@@ -103,7 +162,7 @@ def main() -> None:
             print(f"[INFO] ── Window opened {datetime.now():%H:%M:%S} "
                   f"(collecting for {READ_WINDOW_SECS}s) ──")
 
-            # 3a. Collect until window expires
+            # Collect until window expires
             while not shutdown.is_set() and (time.time() - window_start) < READ_WINDOW_SECS:
                 try:
                     tags_now = reader.read(READ_WINDOW_MS)
@@ -141,7 +200,7 @@ def main() -> None:
 
                 time.sleep(0.05)
 
-            # 3b. Build one event per unique EPC
+            # Build one event per unique EPC
             print(f"[INFO] Window closed — {len(unique_tags)} unique tag(s) detected.")
 
             events: List[dict] = [
@@ -158,22 +217,13 @@ def main() -> None:
                 print("[INFO] No events to send.\n")
                 continue
 
-            # 3c. Apply REQUIRE_USER_MEMORY filter
-            if REQUIRE_USER_MEMORY:
-                filtered   = [e for e in events if e.get("userMemory") is not None]
-                suppressed = len(events) - len(filtered)
-                if suppressed:
-                    print(f"[INFO] {suppressed} event(s) suppressed — no user memory read.")
-            else:
-                filtered = events
-
+            filtered = _apply_filter(events)
             if not filtered:
                 print("[INFO] No events passed filter.\n")
                 continue
 
-            # 3d. Send — WiFi first, LTE fallback
-            #send_with_fallback(filtered, pico_ser)
-            #print()
+            send_rfid_events(filtered, pico_ser)
+            print()
 
     except Exception as ex:
         print(f"\n[ERROR] Fatal: {ex}", file=sys.stderr)

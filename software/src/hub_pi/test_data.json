@@ -1,0 +1,11 @@
+[
+  {
+    "timestamp": "2026-04-21T22:18:36.000",
+    "eventType": "ENTER",
+    "epc": "0080B0443C000000129D9CAA",
+    "userMemory": "0876 00F5 1388 0C1C",
+    "rssi": -57,
+    "antennaId": 1
+  }
+]
+

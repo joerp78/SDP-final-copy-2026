@@ -1,33 +1,36 @@
 import time
 import board
-import busio
 import adafruit_ahtx0
-from smbus2 import SMBus
+import adafruit_pcf8591.pcf8591 as PCF
+from adafruit_pcf8591.analog_in import AnalogIn
 
-# Shared I2C bus
-i2c = busio.I2C(board.SCL, board.SDA)
+i2c = board.I2C()
 
-# RH / temperature sensor
 temp_sensor = adafruit_ahtx0.AHTx0(i2c)
 
-# PCF8591 ADC for photodiode
-ADC_ADDR = 0x48
-adc_bus = SMBus(1)
-
-def read_light_raw():
-    # PCF8591 needs one dummy read before the real one
-    adc_bus.read_byte(ADC_ADDR)
-    return adc_bus.read_byte(ADC_ADDR)
+adc = PCF.PCF8591(i2c)
+light_channel = AnalogIn(adc, 0)
 
 try:
     while True:
         temperature_c = temp_sensor.temperature
         humidity = temp_sensor.relative_humidity
-        light_raw = read_light_raw()
+        raw = light_channel.value
+        voltage = light_channel.voltage
+
+        # Normalize to 0.0-1.0 based on observed min/max voltage range
+        # With 1MΩ resistor and 3.3V supply:
+        MIN_V = 0.0
+        MAX_V = 3.3
+        normalized = (voltage - MIN_V) / (MAX_V - MIN_V)
+
+        # Flip if needed — change to (1 - normalized) if behavior is backwards
+        brightness_pct = round((1-normalized) * 100, 1)
 
         print(f"Temperature: {temperature_c:.2f} C")
-        print(f"Humidity: {humidity:.2f} %")
-        print(f"Light (raw): {light_raw}")
+        print(f"Humidity:    {humidity:.2f} %")
+        print(f"Voltage:     {voltage:.3f} V")
+        print(f"Brightness:  {brightness_pct}%")
         print("----------------------")
 
         time.sleep(2)

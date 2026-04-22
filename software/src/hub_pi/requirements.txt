@@ -1,3 +1,9 @@
 setuptools
 requests
 pyserial
+board
+adafruit-blinka 
+adafruit-circuitpython-ahtx0
+RPi.GPIO
+smbus2
+adafruit-circuitpython-pcf8591

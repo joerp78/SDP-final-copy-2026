@@ -18,12 +18,13 @@ USER_MEM_RETRIES = 8
 USER_MEM_DELAY   = 0.15               # seconds between retry attempts
 
 # ─── API / Server ────────────────────────────────────────────────────────────
-API_URL          = "https://joepaola.com/sdp/api/events"
+API_URL          = "https://joepaola.com/sdp"
 API_TIMEOUT_SEC  = 10
 
 # ─── Behaviour flags ─────────────────────────────────────────────────────────
 REQUIRE_USER_MEMORY = True             # suppress events that lack user memory
 FORCE_LTE           = False             # True → skip WiFi, always use LTE
+TEST_DATA           = True              #True, use test data
 
 # ─── LTE / Sixfab PicoLTE ────────────────────────────────────────────────────
 PICO_PORT         = "/dev/ttyACM1"
@@ -36,4 +37,9 @@ ALLOWED_TAGS = {
     "0080B0443C00000012787622", #GEN 1 Board
     "0080B0443C00000012787627", #GEN 1 Board
     "0080B0443C000000129D9CAA" #GEN 2 Board
+}
+
+EPC_PLANT_MAP: dict[str, int] = {
+    "0080B0443C000000129D9CAA": 1,
+    # "0080B0443C000000129D9CBB": 2,   # add more tags here
 }
