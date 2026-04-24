@@ -10,7 +10,7 @@
 
 #include <msp430.h>
 #include <stdint.h>
-#include "src/em4325_spi.h"
+#include "src/em4325_spi.h" // hello
 
 /* ---- Sine generation config ----
  * MCLK = SMCLK = 8 MHz
