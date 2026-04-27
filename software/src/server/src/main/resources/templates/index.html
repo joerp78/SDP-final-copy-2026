@@ -567,8 +567,8 @@
                         <span class="metric-label">Conductivity</span>
                         <span class="metric-value"
                               th:text="${plant.soilConductivity != null
-                                        ? #numbers.formatDecimal(plant.soilConductivity,1,2) + ' µS/cm'
-                                        : '—'}">1.20 µS/cm</span>
+                                        ? #numbers.formatDecimal(plant.soilConductivity,1,2) + ' %'
+                                        : '—'}">1.20 %</span>
                     </div>
                 </div>
 
@@ -789,7 +789,7 @@
             buildChart('moistureChart-'     + pid, d.labels, d.soilMoisture,
                        '#457b9d', 'Soil Moisture', '%');
             buildChart('conductivityChart-' + pid, d.labels, d.soilConductivity,
-                       '#e9c46a', 'Conductivity',  'µS/cm');
+                       '#e9c46a', 'Conductivity',  '%');
         });
     }
 </script>

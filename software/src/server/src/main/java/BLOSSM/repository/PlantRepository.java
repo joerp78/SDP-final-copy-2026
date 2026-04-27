@@ -44,6 +44,18 @@ public interface PlantRepository extends JpaRepository<Plant, Long> {
             Long plantId, LocalDateTime since);
 
     /**
+     * Latest reading for a plant that actually has sensor data (excludes
+     * registration rows which have null temperature).
+     *
+     *   SELECT * FROM plant_readings
+     *   WHERE plant_id = ?
+     *     AND temperature IS NOT NULL
+     *   ORDER BY timestamp DESC
+     *   LIMIT 1
+     */
+    Optional<Plant> findTopByPlantIdAndTemperatureIsNotNullOrderByTimestampDesc(Long plantId);
+
+    /**
      * Check if a plant with this logical ID has already been registered.
      */
     boolean existsByPlantId(Long plantId);
