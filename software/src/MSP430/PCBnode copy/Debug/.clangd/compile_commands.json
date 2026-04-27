@@ -1,12 +1,12 @@
 [
    {
-      "directory" : "/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy/Debug",
-      "command"   : "clang++ -I\"/Applications/ti/ccs2031/ccs/ccs_base/msp430/include\" -I\"/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy\" -I\"/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy/include\" -I\"/Applications/ti/ccs2031/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8 -xc",
-      "file"      : "/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy/main.c"
+      "directory" : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy/Debug",
+      "command"   : "clang++ -I\"C:/ti/ccs2050/ccs/ccs_base/msp430/include\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy/include\" -I\"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8 -xc",
+      "file"      : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy/main.c"
    },
    {
-      "directory" : "/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy/Debug",
-      "command"   : "clang++ -I\"/Applications/ti/ccs2031/ccs/ccs_base/msp430/include\" -I\"/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy\" -I\"/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy/include\" -I\"/Applications/ti/ccs2031/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8 -xc",
-      "file"      : "/Users/pratyushshrestha/workspace_ccstheia/PCBnode copy/src/em4325_spi.c"
+      "directory" : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy/Debug",
+      "command"   : "clang++ -I\"C:/ti/ccs2050/ccs/ccs_base/msp430/include\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy/include\" -I\"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8 -xc",
+      "file"      : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/PCBnode copy/src/em4325_spi.c"
    }
 ]

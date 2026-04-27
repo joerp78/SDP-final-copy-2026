@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PCBnode Debug",
+            "type": "ccs-debug",
+            "request": "launch"
+        },
+        {
+            "name": "PCBnode copy",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "PCBnode copy",
+                "resourceId": "/PCBnode copy"
+            }
+        }
+    ]
+}
