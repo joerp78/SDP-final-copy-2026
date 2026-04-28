@@ -19,6 +19,8 @@ User-memory layout (each word = 2 bytes, big-endian, all uint16):
   Word 3 - battery          (mV,     uint16)
 
 Plant ID is resolved from the tag EPC via EPC_PLANT_MAP in config.py.
+
+TEST
 """
 
 from __future__ import annotations
