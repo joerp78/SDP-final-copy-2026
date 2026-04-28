@@ -196,6 +196,8 @@ void main(void)
     init_Clock_8MHz();
     init_GPIO();
     PM5CTL0 &= ~LOCKLPM5;       // unlock pins
+    P2IFG &= ~BIT1;    // clear any flag that set during unlock
+    P2IE  |=  BIT1;
     __delay_cycles(80000);      // let SENS_VDD rail settle (~10ms @ 8MHz)
 
     init_DAC();
@@ -204,6 +206,7 @@ void main(void)
     EM4325_SPI_Init();
     init_ADC_Capture_Timer();
     __bis_SR_register(GIE);     // enable global interrupts
+    rfid_write_triggered = 1U;
 
     while (1)
     {
@@ -278,7 +281,10 @@ void main(void)
             peripherals_shutdown();
 
             P2IFG &= ~BIT1;
-            __bis_SR_register(LPM3_bits + GIE);
+            if (!rfid_write_triggered)
+            {
+                __bis_SR_register(LPM3_bits + GIE);
+            }
 
             peripherals_wakeup();
         }
@@ -695,7 +701,7 @@ static void peripherals_wakeup(void)
 {
     // 1. Restore SENS_VDD first
     P1OUT |= BIT3;
-    __delay_cycles(80000);       // ~10ms settle
+    __delay_cycles(80000);
 
     // 2. Restore SPI pins to eUSCI_A0 module function
     P1SEL0 |= (BIT5 | BIT6 | BIT7);
@@ -712,7 +718,7 @@ static void peripherals_wakeup(void)
     // 5. Restore MUX enable
     P5OUT |= BIT3;
 
-    // 6. Reinitialize peripherals in the same order as startup
+    // 6. Reinitialize peripherals
     init_DAC();
     init_Sine_Timer_10kHz_16samples();
     init_ADC();
@@ -725,6 +731,9 @@ static void peripherals_wakeup(void)
     adc_capture_pkpk_raw = 0;
     adc_capture_done     = 0;
     init_ADC_Capture_Timer();
+
+    // 8. Every wakeup is a reader event — always write this cycle
+    rfid_write_triggered = 1U;
 }
 
 #pragma vector = TIMER1_B0_VECTOR
