@@ -134,6 +134,8 @@ void     set_feedback_low(void);
 void     set_feedback_high(void);
 uint32_t isqrt_u64(uint64_t value);
 int16_t  approx_atan2_deg_x10(int32_t y, int32_t x);
+static void peripherals_shutdown(void);
+static void peripherals_wakeup(void); 
 
 /* 12-bit DAC LUT, centered at midscale (2048), full-scale-ish swing */
 static const uint16_t sine_lut_16[SINE_SAMPLES] = {
@@ -171,6 +173,17 @@ static const TempLookup_t lut[] = {
     { 3627, -200 },   // -20.0 C
 };
 #define LUT_SIZE (sizeof(lut) / sizeof(lut[0]))
+
+#pragma vector = PORT2_VECTOR
+__interrupt void PORT2_ISR(void)
+{
+    if (P2IFG & BIT1)
+    {
+        P2IFG &= ~BIT1;              // clear the flag first
+        rfid_write_triggered = 1U;   // signal main loop to write
+        __bic_SR_register_on_exit(LPM3_bits); // wake CPU
+    }
+}
 
 
 /* ===========================================================================
@@ -262,6 +275,12 @@ void main(void)
             }
 
             reset_ADC_Capture();
+            peripherals_shutdown();
+
+            P2IFG &= ~BIT1;
+            __bis_SR_register(LPM3_bits + GIE);
+
+            peripherals_wakeup();
         }
 
         __no_operation();
@@ -318,10 +337,12 @@ void init_GPIO(void)
     // P2.1 — EM4325 AUX input reserved for later wakeup work
     P2SEL0 &= ~BIT1;
     P2SEL1 &= ~BIT1;
-    P2DIR  &= ~BIT1;
-    P2REN  &= ~BIT1;
-    P2IE   &= ~BIT1;
-    P2IFG  &= ~BIT1;
+    P2DIR  &= ~BIT1;          // input
+    P2REN  |=  BIT1;          // enable pull resistor
+    P2OUT  &= ~BIT1;          // pull DOWN (AUX idles low, pulses high)
+    P2IES  &= ~BIT1;          // rising edge triggers interrupt
+    P2IFG  &= ~BIT1;          // clear any stale flag before enabling
+    P2IE   |=  BIT1;          // enable the interrupt
 
     // P2.4 — feedback resistor select, start HIGH for max sensitivity.
     // If the ADC rails, firmware will automatically switch this LOW.
@@ -622,6 +643,88 @@ __interrupt void TIMER0_B0_ISR(void)
 {
     SAC3DAT = sine_lut_16[sine_index];
     sine_index = (sine_index + 1U) & 0x0FU;
+}
+
+/* ---- Shutdown helpers ---- */
+static void peripherals_shutdown(void)
+{
+    // Drive analog input pins low before cutting SENS_VDD
+    // to prevent back-feed through ESD diodes
+    P1SEL0 &= ~(BIT0 | BIT1);   // remove analog function
+    P1SEL1 &= ~(BIT0 | BIT1);
+    P1DIR  |=  (BIT0 | BIT1);   // set as output
+    P1OUT  &= ~(BIT0 | BIT1);   // drive low
+
+    // Same for P3.5 (DAC output / PROBE_DAC)
+    P3SEL0 &= ~BIT5;
+    P3SEL1 &= ~BIT5;
+    P3DIR  |=  BIT5;
+    P3OUT  &= ~BIT5;
+
+    // Stop sine timer
+    TB0CTL   = TBSSEL__SMCLK | MC__STOP | TBCLR;
+    TB0CCTL0 &= ~CCIE;
+
+    // Stop ADC capture timer
+    TB1CTL   = TBSSEL__SMCLK | MC__STOP | TBCLR;
+    TB1CCTL0 &= ~CCIE;
+
+    // Disable DAC and OA
+    SAC3OA  = 0;
+    SAC3DAC = 0;
+
+    // Put SPI in reset
+    UCA0CTLW0 |= UCSWRST;
+
+    // Drive all sensor-connected pins low
+    P1SEL0 &= ~(BIT0 | BIT1 | BIT5 | BIT6 | BIT7);
+    P1SEL1 &= ~(BIT0 | BIT1 | BIT5 | BIT6 | BIT7);
+    P1DIR  |=  (BIT0 | BIT1 | BIT5 | BIT6 | BIT7);
+    P1OUT  &= ~(BIT0 | BIT1 | BIT5 | BIT6 | BIT7);
+
+    // Disable MUX
+    P5OUT &= ~BIT3;
+
+    // Cut SENS_VDD last
+    P1OUT &= ~BIT3;
+
+    __delay_cycles(80000);   // ~10ms at 8MHz
+}
+
+static void peripherals_wakeup(void)
+{
+    // 1. Restore SENS_VDD first
+    P1OUT |= BIT3;
+    __delay_cycles(80000);       // ~10ms settle
+
+    // 2. Restore SPI pins to eUSCI_A0 module function
+    P1SEL0 |= (BIT5 | BIT6 | BIT7);
+    P1SEL1 &= ~(BIT5 | BIT6 | BIT7);
+
+    // 3. Restore analog input pins
+    P1SEL0 |= (BIT0 | BIT1);
+    P1SEL1 |= (BIT0 | BIT1);
+
+    // 4. Restore P3.5 to SAC3 OA function
+    P3SEL0 |= BIT5;
+    P3SEL1 |= BIT5;
+
+    // 5. Restore MUX enable
+    P5OUT |= BIT3;
+
+    // 6. Reinitialize peripherals in the same order as startup
+    init_DAC();
+    init_Sine_Timer_10kHz_16samples();
+    init_ADC();
+    EM4325_SPI_Init();
+
+    // 7. Reset capture state and restart capture timer
+    adc_capture_index    = 0;
+    adc_capture_min_raw  = 0x0FFF;
+    adc_capture_max_raw  = 0;
+    adc_capture_pkpk_raw = 0;
+    adc_capture_done     = 0;
+    init_ADC_Capture_Timer();
 }
 
 #pragma vector = TIMER1_B0_VECTOR
