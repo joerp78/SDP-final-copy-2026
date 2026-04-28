@@ -32,32 +32,38 @@
 #define ADC_RAIL_HIGH_THRESHOLD  (4079U)
 #define FEEDBACK_RETURN_HIGH_PKPK_RAW (200U)
 #define FEEDBACK_RETURN_HIGH_COUNT    (3U)
-#define RAW_EXPORT_AVG_CAPTURES       (4U)
 #define TAG_PHASE_INVALID_WORD        (0x8000U)
+#define DAC_LUT_CENTER_RAW            (2048)
+#define DAC_LUT_PKPK_RAW              (4094U)
+#define TAG_PHASE_VALID_BIT           (0x8000U)
 
 /* ---- EM4325 USER payload format ----
  * USER word 0:
- *   Raw temperature ADC count (unsigned 16-bit), averaged over
- *   RAW_EXPORT_AVG_CAPTURES reads from P1.0 / ADC channel A0.
+ *   Raw temperature ADC count (unsigned 16-bit) from
+ *   P1.0 / ADC channel A0.
  *
  * USER word 1:
- *   Raw phase delay in signed steps_x100 (two's complement int16).
- *   100 = 1.00 LUT step, 1 LUT step = 22.5 deg = 6.25 us at 10 kHz.
- *   Special value 0x8000 means phase invalid / not enough signal.
+ *   Raw phase packet.
+ *   Bit 15 = phase-valid flag:
+ *     1 -> phase valid
+ *     0 -> phase invalid / not enough signal
+ *   Bits [11:0] = signed phase delay in deg_x10, two's complement.
+ *     Example: 123 = +12.3 deg, 0xFF85 = -12.3 deg in 12-bit two's complement.
  *
  * USER word 2:
  *   Raw conductivity amplitude packet.
  *   Bit 15 = feedback state during export:
  *     0 -> P2.4 high (high sensitivity path)
  *     1 -> P2.4 low  (reduced gain / anti-rail path)
- *   Bits [11:0] = averaged raw conductivity amplitude
- *     (peak-to-peak ADC counts from P1.1 / ADC channel A1).
+ *   Bits [11:0] = raw conductivity amplitude
+ *     (I/Q-derived amplitude, scaled to ADC-count-like peak-to-peak units).
  *
  * Server-side decode:
  *   temp_raw = word0
- *   phase_raw = int16(word1), unless word1 == 0x8000
- *   phase_deg = phase_raw * 22.5 / 100
- *   phase_us  = phase_raw * 6.25 / 100
+ *   phase_valid = (word1 & 0x8000) != 0
+ *   phase_raw_12 = word1 & 0x0FFF
+ *   if (phase_raw_12 & 0x0800) phase_raw_12 -= 0x1000
+ *   phase_deg = phase_raw_12 / 10.0
  *   feedback_low = (word2 & 0x8000) != 0
  *   conductivity_raw = word2 & 0x0FFF
  */
@@ -87,6 +93,7 @@ volatile uint32_t moisture_capture_count  = 0;
 volatile uint32_t temperature_update_count = 0;
 volatile uint8_t  em4325_temp_write_status = 0;
 volatile uint8_t  em4325_phase_write_status = 0;
+volatile uint8_t  rfid_write_triggered      = 0;
 volatile uint16_t temperature_tag_word     = 0;
 volatile uint16_t phase_tag_word           = TAG_PHASE_INVALID_WORD;
 volatile uint16_t conductivity_tag_word    = 0;
@@ -95,11 +102,6 @@ volatile uint8_t  feedback_low_enabled     = 0;
 volatile uint8_t  adc_capture_railed       = 0;
 volatile uint32_t feedback_switch_count    = 0;
 volatile uint8_t  feedback_high_return_count = 0;
-volatile uint8_t  raw_export_capture_count = 0;
-volatile uint8_t  raw_export_phase_valid_count = 0;
-volatile uint32_t temp_raw_accumulator     = 0;
-volatile uint32_t conductivity_raw_accumulator = 0;
-volatile int32_t  phase_raw_accumulator    = 0;
 volatile uint16_t adc_phase_bins_raw[SINE_SAMPLES] = {0};
 volatile uint16_t adc_phase_bins_count[SINE_SAMPLES] = {0};
 volatile uint8_t  phase_delay_steps       = 0;
@@ -112,6 +114,9 @@ volatile int16_t  phase_delay_us_x100           = 0;
 volatile int32_t  phase_delay_ns                = 0;
 volatile uint8_t  phase_delay_valid             = 0;
 volatile int32_t  phase_correlation_score = 0;
+volatile int32_t  iq_in_phase_raw        = 0;
+volatile int32_t  iq_quadrature_raw      = 0;
+volatile uint32_t iq_magnitude_raw       = 0;
 
 /* ---- Prototypes ---- */
 void     init_Clock_8MHz(void);
@@ -123,12 +128,12 @@ void     init_Sine_Timer_10kHz_16samples(void);
 void     init_ADC_Capture_Timer(void);
 void     process_ADC_Capture(void);
 void     reset_ADC_Capture(void);
-int32_t  calc_phase_correlation(uint8_t shift, uint16_t mean_raw);
 int16_t  adc_to_temperature_x10(uint16_t adc_val);
-void     reset_raw_export_accumulators(void);
 void     update_raw_export_words(void);
 void     set_feedback_low(void);
 void     set_feedback_high(void);
+uint32_t isqrt_u64(uint64_t value);
+int16_t  approx_atan2_deg_x10(int32_t y, int32_t x);
 
 /* 12-bit DAC LUT, centered at midscale (2048), full-scale-ish swing */
 static const uint16_t sine_lut_16[SINE_SAMPLES] = {
@@ -236,19 +241,10 @@ void main(void)
             adc_temp_raw = read_ADC_channel(ADCINCH_0);
             temperature_C_x10 = adc_to_temperature_x10(adc_temp_raw);
             temperature_F_x10 = (temperature_C_x10 * 9 / 5) + 320;
-            temp_raw_accumulator += adc_temp_raw;
-            conductivity_raw_accumulator += moisture_signal_raw;
-            raw_export_capture_count++;
-            if (phase_delay_valid)
-            {
-                phase_raw_accumulator += phase_delay_signed_steps_x100;
-                raw_export_phase_valid_count++;
-            }
+            update_raw_export_words();
 
-            if (raw_export_capture_count >= RAW_EXPORT_AVG_CAPTURES)
+            if (rfid_write_triggered)
             {
-                update_raw_export_words();
-
                 em4325_temp_write_status =
                     EM4325_WriteWord(EM4325_USER_WORD0_ADDR,
                                      temperature_tag_word);
@@ -259,7 +255,10 @@ void main(void)
                     EM4325_WriteWord(EM4325_USER_WORD2_ADDR,
                                      conductivity_tag_word);
                 temperature_update_count++;
-                reset_raw_export_accumulators();
+
+                // Placeholder trigger behavior: perform one export, then wait
+                // for future firmware to assert the trigger again.
+                rfid_write_triggered = 0U;
             }
 
             reset_ADC_Capture();
@@ -415,16 +414,14 @@ void process_ADC_Capture(void)
     uint32_t sum_abs_dev = 0;
     uint32_t phase_sum[SINE_SAMPLES] = {0};
     uint16_t phase_count[SINE_SAMPLES] = {0};
-    int32_t  corr_score[SINE_SAMPLES] = {0};
-    int32_t best_score = 0;
-    uint8_t best_shift = 0;
-    int32_t left_score;
-    int32_t center_score;
-    int32_t right_score;
-    int32_t curvature;
-    int32_t frac_x100 = 0;
-    int32_t refined_steps_x100;
-    int32_t signed_steps_x100;
+    uint32_t ref_energy = 0;
+    int32_t  i_accum = 0;
+    int32_t  q_accum = 0;
+    uint32_t vector_magnitude;
+    uint32_t amplitude_pkpk_raw;
+    int16_t  phase_angle_deg_x10;
+    int32_t  signed_steps_x100;
+    int32_t  angle_plus_180_x10;
 
     for (i = 0; i < ADC_CAPTURE_SAMPLES; i++)
     {
@@ -463,48 +460,51 @@ void process_ADC_Capture(void)
 
     for (phase = 0; phase < SINE_SAMPLES; phase++)
     {
-        corr_score[phase] = calc_phase_correlation((uint8_t)phase, adc_capture_mean_raw);
-        if ((phase == 0U) || (corr_score[phase] > best_score))
-        {
-            best_score = corr_score[phase];
-            best_shift = (uint8_t)phase;
-        }
+        int32_t adc_ac = (int32_t)adc_phase_bins_raw[phase] - (int32_t)adc_capture_mean_raw;
+        int32_t sin_ref = (int32_t)sine_lut_16[phase] - DAC_LUT_CENTER_RAW;
+        int32_t cos_ref = (int32_t)sine_lut_16[(phase + (SINE_SAMPLES / 4U)) & 0x0FU] - DAC_LUT_CENTER_RAW;
+
+        i_accum += adc_ac * sin_ref;
+        q_accum += adc_ac * cos_ref;
+        ref_energy += (uint32_t)(sin_ref * sin_ref);
     }
 
-    left_score   = corr_score[(best_shift + SINE_SAMPLES - 1U) & 0x0FU];
-    center_score = corr_score[best_shift];
-    right_score  = corr_score[(best_shift + 1U) & 0x0FU];
-    curvature    = left_score - (2L * center_score) + right_score;
+    iq_in_phase_raw = i_accum;
+    iq_quadrature_raw = q_accum;
+    vector_magnitude = isqrt_u64((((uint64_t)i_accum) * ((uint64_t)i_accum)) +
+                                 (((uint64_t)q_accum) * ((uint64_t)q_accum)));
+    iq_magnitude_raw = vector_magnitude;
 
-    /* Refine the peak between LUT steps with a simple parabolic fit. */
-    if (curvature != 0)
+    amplitude_pkpk_raw = 0U;
+    if (ref_energy != 0U)
     {
-        frac_x100 = ((left_score - right_score) * 50L) / curvature;
-        if (frac_x100 > 50L)
-            frac_x100 = 50L;
-        if (frac_x100 < -50L)
-            frac_x100 = -50L;
+        amplitude_pkpk_raw =
+            (uint32_t)(((uint64_t)vector_magnitude * DAC_LUT_PKPK_RAW) / ref_energy);
     }
+    if (amplitude_pkpk_raw > 0x0FFFU)
+        amplitude_pkpk_raw = 0x0FFFU;
 
-    phase_delay_steps       = best_shift;
-    phase_delay_deg_x10     = (uint16_t)(best_shift * 225U); // 22.5 deg/step
-    refined_steps_x100 = ((int32_t)best_shift * 100L) + frac_x100;
-    if (refined_steps_x100 < 0)
-        refined_steps_x100 = 0;
-    phase_delay_steps_x100  = (uint16_t)refined_steps_x100;
-    phase_delay_deg_x100    = (uint16_t)((phase_delay_steps_x100 * 225U) / 10U);
-    signed_steps_x100 = refined_steps_x100;
-    if (signed_steps_x100 > ((int32_t)SINE_SAMPLES * 100L / 2L))
-        signed_steps_x100 -= ((int32_t)SINE_SAMPLES * 100L);
+    phase_angle_deg_x10 = approx_atan2_deg_x10(q_accum, i_accum);
+    angle_plus_180_x10 = (int32_t)phase_angle_deg_x10 + 1800L;
+    if (angle_plus_180_x10 < 0L)
+        angle_plus_180_x10 += 3600L;
+    if (angle_plus_180_x10 >= 3600L)
+        angle_plus_180_x10 -= 3600L;
+
+    phase_delay_deg_x10 = (uint16_t)angle_plus_180_x10;
+    phase_delay_steps = (uint8_t)((phase_delay_deg_x10 + 112U) / 225U) & 0x0FU;
+    phase_delay_steps_x100 = (uint16_t)((phase_delay_deg_x10 * 100L) / 225L);
+    phase_delay_deg_x100 = (uint16_t)(phase_delay_deg_x10 * 10U);
+    signed_steps_x100 = ((int32_t)phase_angle_deg_x10 * 100L) / 225L;
     phase_delay_signed_steps_x100 = (int16_t)signed_steps_x100;
-    phase_delay_signed_deg_x10    = (int16_t)((signed_steps_x100 * 225L) / 100L);
+    phase_delay_signed_deg_x10    = phase_angle_deg_x10;
     phase_delay_us_x100           = (int16_t)((signed_steps_x100 * 625L) / 100L);
     phase_delay_ns                = (signed_steps_x100 * 6250L) / 100L;
-    phase_delay_valid             = (adc_capture_pkpk_raw >= PHASE_VALID_MIN_PKPK_RAW) ? 1U : 0U;
-    phase_correlation_score = best_score;
+    phase_delay_valid             = (amplitude_pkpk_raw >= PHASE_VALID_MIN_PKPK_RAW) ? 1U : 0U;
+    phase_correlation_score       = vector_magnitude;
 
-    // Use peak-to-peak as the first simple moisture-sensitive signal metric.
-    moisture_signal_raw = adc_capture_pkpk_raw;
+    // Use coherent I/Q magnitude, scaled back to approximate peak-to-peak counts.
+    moisture_signal_raw = (uint16_t)amplitude_pkpk_raw;
     moisture_signal_mV  = (uint16_t)(((uint32_t)moisture_signal_raw * 3000U) / 4095U);
     moisture_capture_count++;
 }
@@ -522,58 +522,77 @@ void reset_ADC_Capture(void)
     TB1CTL   = TBSSEL__SMCLK | MC__UP | TBCLR;
 }
 
-void reset_raw_export_accumulators(void)
+uint32_t isqrt_u64(uint64_t value)
 {
-    raw_export_capture_count = 0U;
-    raw_export_phase_valid_count = 0U;
-    temp_raw_accumulator = 0U;
-    conductivity_raw_accumulator = 0U;
-    phase_raw_accumulator = 0;
-    phase_tag_word = TAG_PHASE_INVALID_WORD;
-}
+    uint64_t bit = (uint64_t)1 << 62;
+    uint64_t result = 0;
 
-int32_t calc_phase_correlation(uint8_t shift, uint16_t mean_raw)
-{
-    uint8_t phase;
-    int32_t score = 0;
+    while (bit > value)
+        bit >>= 2;
 
-    for (phase = 0; phase < SINE_SAMPLES; phase++)
+    while (bit != 0U)
     {
-        int32_t adc_ac = (int32_t)adc_phase_bins_raw[phase] - (int32_t)mean_raw;
-        int32_t dac_ac = (int32_t)sine_lut_16[(phase + shift) & 0x0FU] - 2048;
-        score += adc_ac * dac_ac;
+        if (value >= result + bit)
+        {
+            value -= result + bit;
+            result = (result >> 1) + bit;
+        }
+        else
+        {
+            result >>= 1;
+        }
+        bit >>= 2;
     }
 
-    return score;
+    return (uint32_t)result;
+}
+
+int16_t approx_atan2_deg_x10(int32_t y, int32_t x)
+{
+    int32_t abs_y;
+    int32_t angle_deg_x10;
+
+    if ((x == 0) && (y == 0))
+        return 0;
+
+    if (x == 0)
+        return (y > 0) ? 900 : -900;
+
+    abs_y = (y >= 0) ? y : -y;
+    abs_y += 1;
+
+    if (x >= 0)
+    {
+        angle_deg_x10 = 450L - (450L * (x - abs_y)) / (x + abs_y);
+    }
+    else
+    {
+        angle_deg_x10 = 1350L - (450L * (x + abs_y)) / (abs_y - x);
+    }
+
+    if (y < 0)
+        angle_deg_x10 = -angle_deg_x10;
+
+    return (int16_t)angle_deg_x10;
 }
 
 void update_raw_export_words(void)
 {
-    int32_t avg_phase_raw;
-    uint16_t avg_conductivity_raw;
+    int16_t phase_clamped = phase_delay_signed_deg_x10;
 
-    if (raw_export_capture_count == 0U)
-        return;
-
-    temperature_tag_word = (uint16_t)(temp_raw_accumulator / raw_export_capture_count);
-    avg_conductivity_raw = (uint16_t)(conductivity_raw_accumulator / raw_export_capture_count);
-    conductivity_tag_word = avg_conductivity_raw & 0x0FFFU;
+    temperature_tag_word = adc_temp_raw;
+    conductivity_tag_word = moisture_signal_raw & 0x0FFFU;
     if (feedback_low_enabled)
         conductivity_tag_word |= 0x8000U;
 
-    if (raw_export_phase_valid_count != 0U)
-    {
-        avg_phase_raw = phase_raw_accumulator / raw_export_phase_valid_count;
-        if (avg_phase_raw > 32767L)
-            avg_phase_raw = 32767L;
-        if (avg_phase_raw < -32767L)
-            avg_phase_raw = -32767L;
-        phase_tag_word = (uint16_t)((int16_t)avg_phase_raw);
-    }
-    else
-    {
-        phase_tag_word = TAG_PHASE_INVALID_WORD;
-    }
+    if (phase_clamped > 2047)
+        phase_clamped = 2047;
+    if (phase_clamped < -2048)
+        phase_clamped = -2048;
+
+    phase_tag_word = ((uint16_t)phase_clamped) & 0x0FFFU;
+    if (phase_delay_valid)
+        phase_tag_word |= TAG_PHASE_VALID_BIT;
 }
 
 void set_feedback_low(void)
@@ -584,7 +603,6 @@ void set_feedback_low(void)
         feedback_low_enabled = 1U;
         feedback_switch_count++;
         feedback_high_return_count = 0U;
-        reset_raw_export_accumulators();
     }
 }
 
@@ -596,7 +614,6 @@ void set_feedback_high(void)
         feedback_low_enabled = 0U;
         feedback_switch_count++;
         feedback_high_return_count = 0U;
-        reset_raw_export_accumulators();
     }
 }
 
