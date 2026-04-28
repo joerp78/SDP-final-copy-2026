@@ -38,15 +38,96 @@ from hub_sensors import sample_hub
 #  USER-MEMORY DECODER
 # -----------------------------------------------------------------------------
 
+def compute_conductivity(cond_word: int) -> float:
+    """
+    Decode the packed conductivity word and convert it to a conductivity percent.
+
+    Tag encoding:
+      - bit 15: feedback_low_enabled
+      - bits 11:0: raw peak-to-peak amplitude in 12-bit ADC counts
+
+    Conversion rules provided by the firmware team:
+      - raw pk-pk < 10 mV -> 0.0%
+      - if feedback_low_enabled == 1:
+          10 mV  -> 65.0%
+          2000 mV -> 100.0%
+      - if feedback_low_enabled == 0:
+          10 mV  -> 0.0%
+          2500 mV -> 64.0%
+
+    For now, the raw 12-bit amplitude is converted to millivolts assuming a
+    3.0 V ADC full scale because battery processing is not yet available on the
+    reader side.
+
+    Returns:
+        Conductivity percentage rounded to 1 decimal place.
+    """
+    feedback_low_enabled = (cond_word & 0x8000) != 0
+    amplitude_raw = cond_word & 0x0FFF
+
+    amplitude_mv = (amplitude_raw * 3000.0) / 4095.0
+
+    if amplitude_mv < 10.0:
+        return 0.0
+
+    if feedback_low_enabled:
+        if amplitude_mv >= 2000.0:
+            return 100.0
+        percent = 65.0 + ((amplitude_mv - 10.0) * (100.0 - 65.0) / (2000.0 - 10.0))
+        return round(percent, 1)
+
+    if amplitude_mv >= 2500.0:
+        return 64.0
+
+    percent = (amplitude_mv - 10.0) * 64.0 / (2500.0 - 10.0)
+    return round(percent, 1)
+
+
+def compute_moisture(phase_word: int) -> float:
+    """
+    Decode the packed phase word and convert it to a moisture percent.
+
+    Tag encoding:
+      - bit 15: phase_delay_valid
+      - bits 11:0: signed phase delay in deg_x10 (12-bit two's complement)
+
+    Conversion rules provided by the firmware team:
+      - phase_delay_valid == 0 -> -1.0%
+      - phase > 30 deg  -> 100.0%
+      - phase < -170 deg -> 0.0%
+      - linearly interpolate in between
+
+    Returns:
+        Moisture percentage rounded to 1 decimal place, or -1.0 when invalid.
+    """
+    phase_delay_valid = (phase_word & 0x8000) != 0
+    if not phase_delay_valid:
+        return -1.0
+
+    phase_raw_12 = phase_word & 0x0FFF
+    if phase_raw_12 & 0x0800:
+        phase_raw_12 -= 0x1000
+
+    phase_deg = phase_raw_12 / 10.0
+
+    if phase_deg >= 30.0:
+        return 100.0
+    if phase_deg <= -170.0:
+        return 0.0
+
+    percent = (phase_deg - (-170.0)) * 100.0 / (30.0 - (-170.0))
+    return round(percent, 1)
+
+
 def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, dict]]:
     """
     Decode a 4-word plant sensor blob from user memory.
 
     Word layout:
-      [0] temperature  (uint16 x 0.01 -> deg C)
-      [1] conductivity (uint16 x 0.01 -> uS/cm)
-      [2] moisture     (uint16 x 0.01 -> %)
-      [3] battery      (uint16        -> mV)
+      [0] temperature  (raw ADC count)
+      [1] phase packet (bit15 valid, bits11:0 signed deg_x10)
+      [2] conductivity packet (bit15 feedback_low_enabled, bits11:0 raw amplitude)
+      [3] battery      (uint16 -> mV)
 
     Plant ID is looked up from EPC_PLANT_MAP.
     Returns (plant_id, payload dict) or None on failure.
@@ -56,19 +137,25 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
         print(f"[WARN] EPC {epc}: user memory too short ({len(raw)} bytes, need 8).")
         return None
 
-    temp_raw, cond_raw, moist_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
+    temp_raw, phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
 
     plant_id = EPC_PLANT_MAP.get(epc)
     if plant_id is None:
         print(f"[WARN] EPC {epc}: not found in EPC_PLANT_MAP - skipped.")
         return None
 
+    # Temperature is still passed through with the legacy raw*0.01 scaling used
+    # elsewhere in the hub path. Phase and conductivity now come from packed
+    # firmware words and are converted into percentages by the helpers above.
+    conductivity_pct = compute_conductivity(cond_raw)
+    moisture_pct = compute_moisture(phase_raw)
+
     return plant_id, {
         "plantId":          plant_id,
         "name":             "",          # managed server-side via POST /api/plants
         "temperature":      round(temp_raw  * 0.01, 2),
-        "soilConductivity": round(cond_raw  * 0.01, 2),
-        "soilMoisture":     round(moist_raw * 0.01, 2),
+        "soilConductivity": conductivity_pct,
+        "soilMoisture":     moisture_pct,
         "battery":          batt_raw,    # raw mV, no scaling
         "timestamp":        ts.replace(tzinfo=None).isoformat(timespec="milliseconds"),
     }

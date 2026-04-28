@@ -30,6 +30,9 @@
 #define PHASE_VALID_MIN_PKPK_RAW (8U)
 #define ADC_RAIL_LOW_THRESHOLD   (16U)
 #define ADC_RAIL_HIGH_THRESHOLD  (4079U)
+#define INTERNAL_REF_MV                  (1500U)
+#define INTERNAL_REF_SETTLE_CYCLES       (16000U)
+#define FEEDBACK_GAIN_MARGIN_MILLI       (1175U)
 #define FEEDBACK_RETURN_HIGH_PKPK_RAW (200U)
 #define FEEDBACK_RETURN_HIGH_COUNT    (3U)
 #define TAG_PHASE_INVALID_WORD        (0x8000U)
@@ -87,6 +90,7 @@ volatile uint16_t adc_capture_mean_raw    = 0;
 volatile uint16_t adc_capture_mean_mV     = 0;
 volatile uint16_t adc_capture_avgdev_raw  = 0;
 volatile uint16_t adc_capture_avgdev_mV   = 0;
+volatile uint16_t adc_phase_pkpk_raw      = 0;
 volatile uint16_t moisture_signal_raw     = 0;
 volatile uint16_t moisture_signal_mV      = 0;
 volatile uint32_t moisture_capture_count  = 0;
@@ -100,8 +104,22 @@ volatile uint16_t conductivity_tag_word    = 0;
 volatile uint8_t  em4325_cond_write_status = 0;
 volatile uint8_t  feedback_low_enabled     = 0;
 volatile uint8_t  adc_capture_railed       = 0;
+volatile uint8_t  adc_rail_low_hit         = 0;
+volatile uint8_t  adc_rail_high_hit        = 0;
+volatile uint8_t  feedback_near_vdd_hit    = 0;
 volatile uint32_t feedback_switch_count    = 0;
 volatile uint8_t  feedback_high_return_count = 0;
+volatile uint16_t feedback_last_min_raw    = 0;
+volatile uint16_t feedback_last_max_raw    = 0;
+volatile uint16_t feedback_last_pkpk_raw   = 0;
+volatile uint16_t feedback_last_mean_raw   = 0;
+volatile uint16_t feedback_last_amplitude_raw = 0;
+volatile uint16_t feedback_dynamic_threshold_raw = 0;
+volatile uint16_t feedback_dynamic_headroom_raw  = 0;
+volatile uint16_t measured_vdd_raw_ref          = 0;
+volatile uint16_t measured_vdd_mv               = 0;
+volatile uint8_t  feedback_low_reason_flags = 0;
+volatile uint8_t  feedback_high_reason_flags = 0;
 volatile uint16_t adc_phase_bins_raw[SINE_SAMPLES] = {0};
 volatile uint16_t adc_phase_bins_count[SINE_SAMPLES] = {0};
 volatile uint8_t  phase_delay_steps       = 0;
@@ -132,6 +150,7 @@ int16_t  adc_to_temperature_x10(uint16_t adc_val);
 void     update_raw_export_words(void);
 void     set_feedback_low(void);
 void     set_feedback_high(void);
+uint16_t measure_vdd_mv(void);
 uint32_t isqrt_u64(uint64_t value);
 int16_t  approx_atan2_deg_x10(int32_t y, int32_t x);
 
@@ -196,29 +215,61 @@ void main(void)
     {
         if (adc_capture_done)
         {
+            feedback_last_min_raw = adc_capture_min_raw;
+            feedback_last_max_raw = adc_capture_max_raw;
+            feedback_last_pkpk_raw = adc_capture_pkpk_raw;
+            feedback_last_mean_raw = adc_capture_mean_raw;
+
+            adc_rail_low_hit  = (adc_capture_min_raw <= ADC_RAIL_LOW_THRESHOLD) ? 1U : 0U;
+            adc_rail_high_hit = (adc_capture_max_raw >= ADC_RAIL_HIGH_THRESHOLD) ? 1U : 0U;
             adc_capture_railed =
-                ((adc_capture_min_raw <= ADC_RAIL_LOW_THRESHOLD) ||
-                 (adc_capture_max_raw >= ADC_RAIL_HIGH_THRESHOLD)) ? 1U : 0U;
+                (adc_rail_low_hit || adc_rail_high_hit) ? 1U : 0U;
 
-            if (adc_capture_railed && !feedback_low_enabled)
+            process_ADC_Capture();
+            feedback_last_amplitude_raw = moisture_signal_raw;
+            measured_vdd_mv = measure_vdd_mv();
+            if (measured_vdd_mv != 0U)
+                moisture_signal_mV = (uint16_t)(((uint32_t)moisture_signal_raw * measured_vdd_mv) / 4095U);
+            feedback_dynamic_headroom_raw =
+                (uint16_t)(2U * ((adc_capture_mean_raw < (4095U - adc_capture_mean_raw)) ?
+                                 adc_capture_mean_raw : (4095U - adc_capture_mean_raw)));
+            feedback_dynamic_threshold_raw =
+                (uint16_t)(((uint32_t)feedback_dynamic_headroom_raw * 1000U) /
+                           FEEDBACK_GAIN_MARGIN_MILLI);
+            feedback_near_vdd_hit =
+                (moisture_signal_raw >= feedback_dynamic_threshold_raw) ? 1U : 0U;
+
+            if (!feedback_low_enabled)
             {
-                set_feedback_low();
-                __delay_cycles(MEASUREMENT_SETTLE_CYCLES);
-                reset_ADC_Capture();
-                continue;
+                if (feedback_near_vdd_hit || adc_capture_railed)
+                {
+                    feedback_low_reason_flags = 0U;
+                    if (adc_rail_low_hit)
+                        feedback_low_reason_flags |= BIT0;
+                    if (adc_rail_high_hit)
+                        feedback_low_reason_flags |= BIT1;
+                    if (feedback_near_vdd_hit)
+                        feedback_low_reason_flags |= BIT2;
+                    set_feedback_low();
+                    __delay_cycles(MEASUREMENT_SETTLE_CYCLES);
+                    reset_ADC_Capture();
+                    continue;
+                }
+                feedback_high_return_count = 0U;
             }
-
-            if (feedback_low_enabled)
+            else
             {
                 if (adc_capture_railed)
                 {
                     feedback_high_return_count = 0U;
                 }
-                else if (adc_capture_pkpk_raw <= FEEDBACK_RETURN_HIGH_PKPK_RAW)
+                else if (moisture_signal_raw <= FEEDBACK_RETURN_HIGH_PKPK_RAW)
                 {
                     feedback_high_return_count++;
                     if (feedback_high_return_count >= FEEDBACK_RETURN_HIGH_COUNT)
                     {
+                        feedback_high_reason_flags = 0U;
+                        feedback_high_reason_flags |= BIT0;
                         set_feedback_high();
                         feedback_high_return_count = 0U;
                         __delay_cycles(MEASUREMENT_SETTLE_CYCLES);
@@ -231,12 +282,6 @@ void main(void)
                     feedback_high_return_count = 0U;
                 }
             }
-            else
-            {
-                feedback_high_return_count = 0U;
-            }
-
-            process_ADC_Capture();
 
             adc_temp_raw = read_ADC_channel(ADCINCH_0);
             temperature_C_x10 = adc_to_temperature_x10(adc_temp_raw);
@@ -345,7 +390,7 @@ void init_GPIO(void)
 void init_ADC(void)
 {
     ADCCTL0 &= ~ADCENC;
-    ADCCTL0  = ADCSHT_0 | ADCON;        // 4-cycle S&H, ADC on
+    ADCCTL0  = ADCSHT_0 | ADCON;        // short S&H keeps ADC phase tagging coherent
     ADCCTL1  = ADCSHP;                   // sample timer mode
     ADCCTL2  = ADCRES_2;                 // 12-bit resolution
     ADCMCTL0 = ADCINCH_1 | ADCSREF_0;   // channel A1 (P1.1), ref = AVCC/AVSS
@@ -410,6 +455,8 @@ void process_ADC_Capture(void)
 {
     uint16_t i;
     uint16_t phase;
+    uint16_t phase_min_raw = 0x0FFF;
+    uint16_t phase_max_raw = 0;
     uint32_t sum = 0;
     uint32_t sum_abs_dev = 0;
     uint32_t phase_sum[SINE_SAMPLES] = {0};
@@ -456,7 +503,20 @@ void process_ADC_Capture(void)
         else
             adc_phase_bins_raw[phase] = 0;
         adc_phase_bins_count[phase] = phase_count[phase];
+
+        if (phase_count[phase] != 0U)
+        {
+            if (adc_phase_bins_raw[phase] < phase_min_raw)
+                phase_min_raw = adc_phase_bins_raw[phase];
+            if (adc_phase_bins_raw[phase] > phase_max_raw)
+                phase_max_raw = adc_phase_bins_raw[phase];
+        }
     }
+
+    if (phase_max_raw >= phase_min_raw)
+        adc_phase_pkpk_raw = phase_max_raw - phase_min_raw;
+    else
+        adc_phase_pkpk_raw = 0U;
 
     for (phase = 0; phase < SINE_SAMPLES; phase++)
     {
@@ -503,10 +563,10 @@ void process_ADC_Capture(void)
     phase_delay_valid             = (amplitude_pkpk_raw >= PHASE_VALID_MIN_PKPK_RAW) ? 1U : 0U;
     phase_correlation_score       = vector_magnitude;
 
-    // Use coherent I/Q magnitude, scaled back to approximate peak-to-peak counts.
     moisture_signal_raw = (uint16_t)amplitude_pkpk_raw;
     moisture_signal_mV  = (uint16_t)(((uint32_t)moisture_signal_raw * 3000U) / 4095U);
     moisture_capture_count++;
+    feedback_last_mean_raw = adc_capture_mean_raw;
 }
 
 void reset_ADC_Capture(void)
@@ -545,6 +605,25 @@ uint32_t isqrt_u64(uint64_t value)
     }
 
     return (uint32_t)result;
+}
+
+uint16_t measure_vdd_mv(void)
+{
+    uint16_t ref_sample;
+
+    PMMCTL0_H = PMMPW_H;
+    PMMCTL2 |= INTREFEN;
+    PMMCTL2 = (PMMCTL2 & ~REFVSEL) | INTREFEN | REFVSEL_0;
+    PMMCTL0_H = 0x00;
+
+    __delay_cycles(INTERNAL_REF_SETTLE_CYCLES);
+    ref_sample = read_ADC_channel(ADCINCH_13);
+    measured_vdd_raw_ref = ref_sample;
+
+    if (ref_sample == 0U)
+        return 0U;
+
+    return (uint16_t)(((uint32_t)INTERNAL_REF_MV * 4095U) / ref_sample);
 }
 
 int16_t approx_atan2_deg_x10(int32_t y, int32_t x)
