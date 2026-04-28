@@ -1,0 +1,12 @@
+Debug/
+Release/
+*.out
+*.map
+*.hex
+*.obj
+*.asm
+*_linkInfo.xml
+.clangd
+.settings/
+.DS_Store
+Thumbs.db

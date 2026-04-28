@@ -1,0 +1,19 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "CCS Debug",
+        "type": "ccs-debug",
+        "request": "launch",
+        "projectName": "PCBnode copy",
+        "target": {
+          "deviceName": "MSP430FR2355",
+          "connectionName": "Texas Instruments MSP430 USB1",
+          "ccxmlFile": "${workspaceFolder}/targetConfigs/MSP430FR2355.ccxml"
+        },
+        "program": "${workspaceFolder}/Debug/PCBnode copy.out"
+      }
+    ]
+  }
