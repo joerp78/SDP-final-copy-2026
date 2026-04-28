@@ -6,7 +6,7 @@ Every tunable lives here so the four runtime modules stay focused on logic.
 """
 
 # ─── ThingMagic 6e Micro (RFID) ──────────────────────────────────────────────
-READER_URI       = "tmr:///dev/ttyACM0"
+READER_URI       = "tmr:///dev/rfid_reader"
 READER_BAUDRATE  = 115200
 REGION           = "NA2"
 ANTENNA_PORT     = 1
@@ -24,10 +24,10 @@ API_TIMEOUT_SEC  = 10
 # ─── Behaviour flags ─────────────────────────────────────────────────────────
 REQUIRE_USER_MEMORY = True             # suppress events that lack user memory
 FORCE_LTE           = False             # True → skip WiFi, always use LTE
-TEST_DATA           = True              #True, use test data
+TEST_DATA           = False              #True, use test data
 
 # ─── LTE / Sixfab PicoLTE ────────────────────────────────────────────────────
-PICO_PORT         = "/dev/ttyACM1"
+PICO_PORT         = "/dev/pico_lte"
 PICO_BAUD         = 115200
 PICO_TIMEOUT_SEC  = 60                 # response timeout per transmission
 PICO_WAIT_TIMEOUT = 60                 # how long to wait for "ready" at boot
@@ -36,7 +36,9 @@ PICO_WAIT_TIMEOUT = 60                 # how long to wait for "ready" at boot
 ALLOWED_TAGS = {
     "0080B0443C00000012787622", #GEN 1 Board
     "0080B0443C00000012787627", #GEN 1 Board
-    "0080B0443C000000129D9CAA" #GEN 2 Board
+    "0080B0443C000000129D9CAA",
+    "0080B0443C000000129D9EB2",
+    "0080B0443C000000129DA3B8"#GEN 2 Board
 }
 
 EPC_PLANT_MAP: dict[str, int] = {
