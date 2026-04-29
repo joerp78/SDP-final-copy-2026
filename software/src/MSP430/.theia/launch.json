@@ -14,6 +14,15 @@
                 "name": "SDPMCUCode",
                 "resourceId": "/SDPMCUCode"
             }
+        },
+        {
+            "name": "MSP430_test",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "MSP430_test",
+                "resourceId": "/MSP430_test"
+            }
         }
     ]
 }

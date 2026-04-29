@@ -15,7 +15,7 @@
 #include <msp430.h>
 #include <stdint.h>
 #include <math.h>               // your project already used this
-#include "src/em4325_spi.h"
+#include "em4325_spi.h"
 
 // ---- Thermistor & Circuit Constants ----
 // CURRENTLY NOT USED BUT KEEPING FOR REFERENCE

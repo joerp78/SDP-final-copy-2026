@@ -1,80 +1,16 @@
 [
   {
-    "timestamp": "2026-03-29T16:26:09.4394357-04:00",
+    "timestamp": "2026-04-28T21:19:58.1072888-04:00",
     "eventType": "ENTER",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": "0118000E00000000",
-    "rssi": -42,
+    "epc": "0080B0443C000000129DA3B8",
+    "userMemory": "0000000000000000",
+    "rssi": -51,
     "antennaId": 1
   },
   {
-    "timestamp": "2026-03-29T16:26:14.6222661-04:00",
+    "timestamp": "2026-04-28T21:20:12.7491549-04:00",
     "eventType": "LEAVE",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": null,
-    "rssi": null,
-    "antennaId": null
-  },
-  {
-    "timestamp": "2026-03-29T16:27:08.9986224-04:00",
-    "eventType": "ENTER",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": null,
-    "rssi": -49,
-    "antennaId": 1
-  },
-  {
-    "timestamp": "2026-03-29T16:27:14.050376-04:00",
-    "eventType": "LEAVE",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": null,
-    "rssi": null,
-    "antennaId": null
-  },
-  {
-    "timestamp": "2026-03-29T16:27:14.6218162-04:00",
-    "eventType": "ENTER",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": null,
-    "rssi": -49,
-    "antennaId": 1
-  },
-  {
-    "timestamp": "2026-03-29T16:27:19.658041-04:00",
-    "eventType": "LEAVE",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": null,
-    "rssi": null,
-    "antennaId": null
-  },
-  {
-    "timestamp": "2026-03-29T16:27:43.1943559-04:00",
-    "eventType": "ENTER",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": "0118000E00000000",
-    "rssi": -50,
-    "antennaId": 1
-  },
-  {
-    "timestamp": "2026-03-29T16:27:50.5092827-04:00",
-    "eventType": "LEAVE",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": null,
-    "rssi": null,
-    "antennaId": null
-  },
-  {
-    "timestamp": "2026-03-29T16:28:14.0929685-04:00",
-    "eventType": "ENTER",
-    "epc": "0080B0443C00000012787622",
-    "userMemory": "0118000E00000000",
-    "rssi": -45,
-    "antennaId": 1
-  },
-  {
-    "timestamp": "2026-03-29T16:28:20.3944456-04:00",
-    "eventType": "LEAVE",
-    "epc": "0080B0443C00000012787622",
+    "epc": "0080B0443C000000129DA3B8",
     "userMemory": null,
     "rssi": null,
     "antennaId": null
