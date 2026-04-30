@@ -31,7 +31,10 @@ import requests
 import serial
 
 from config import API_URL, API_TIMEOUT_SEC, FORCE_LTE, EPC_PLANT_MAP
-from hub_sensors import sample_hub
+try:
+    from hub_sensors import sample_hub
+except ImportError:
+    sample_hub = None
 
 
 # -----------------------------------------------------------------------------
@@ -46,7 +49,7 @@ def compute_conductivity(cond_word: int) -> float:
       - bit 15: feedback_low_enabled
       - bits 11:0: raw peak-to-peak amplitude in 12-bit ADC counts
 
-    Conversion rules provided by the firmware team:
+    Conversion rules provided by the fi422rmware team:
       - raw pk-pk < 10 mV -> 0.0%
       - if feedback_low_enabled == 1:
           10 mV  -> 65.0%
