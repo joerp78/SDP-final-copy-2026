@@ -127,19 +127,19 @@ def compute_battery(batt_word: int) -> float:
     Convert the raw battery voltage word from millivolts to a battery percent.
 
     Conversion rules:
-      - 2700 mV -> 0.0%
+      - 2500 mV -> 0.0%
       - 3000 mV -> 100.0%
       - values outside that range are clamped
 
     Returns:
         Battery percentage rounded to 1 decimal place.
     """
-    if batt_word <= 2700:
+    if batt_word <= 2500:
         return 0.0
     if batt_word >= 3000:
         return 100.0
 
-    percent = (batt_word - 2700) * 100.0 / (3000 - 2700)
+    percent = (batt_word - 2500) * 100.0 / (3000 - 2500)
     return round(percent, 1)
 
 
