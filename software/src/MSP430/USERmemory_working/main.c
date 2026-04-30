@@ -48,6 +48,10 @@
 #define EM4325_IO_SPI_AUX_RF_VALUE    (0xA600U)
 #define EM4325_AUX_EVENT_MASK         (0xC000U)
 #define EM4325_AUX_EVENT_RF_FIELD     (0x0000U)
+#define BQ35100_ADDR                  (0x55U)
+#define BQ35100_CMD_VOLTAGE           (0x08U)
+#define BQ35100_WAKE_CYCLES           (8000000UL)
+#define BQ35100_I2C_TIMEOUT_LOOPS     (60000U)
 
 /* ---- EM4325 USER payload format ----
  * USER word 0:
@@ -78,6 +82,9 @@
  *   phase_deg = phase_raw_12 / 10.0
  *   feedback_low = (word2 & 0x8000) != 0
  *   conductivity_raw = word2 & 0x0FFF
+ *
+ * USER word 3:
+ *   Raw BQ35100 voltage reading in mV from I2C command 0x08.
  */
 
 /* ---- Globals ---- */
@@ -109,14 +116,20 @@ volatile uint8_t  em4325_phase_write_status = 0;
 volatile uint8_t  em4325_temp_read_status = 0;
 volatile uint8_t  em4325_phase_read_status = 0;
 volatile uint8_t  em4325_cond_read_status = 0;
+volatile uint8_t  em4325_batt_read_status = 0;
 volatile uint8_t  rfid_write_triggered      = 0;
 volatile uint16_t temperature_tag_word     = 0;
 volatile uint16_t phase_tag_word           = TAG_PHASE_INVALID_WORD;
 volatile uint16_t conductivity_tag_word    = 0;
 volatile uint8_t  em4325_cond_write_status = 0;
+volatile uint8_t  em4325_batt_write_status = 0;
 volatile uint16_t em4325_temp_readback_word = 0;
 volatile uint16_t em4325_phase_readback_word = 0;
 volatile uint16_t em4325_cond_readback_word = 0;
+volatile uint16_t em4325_batt_readback_word = 0;
+volatile uint16_t batt_voltage_mV = 0;
+volatile uint8_t  batt_i2c_error = 0;
+volatile uint16_t battery_tag_word = 0;
 volatile uint8_t  feedback_low_enabled     = 0;
 volatile uint8_t  adc_capture_railed       = 0;
 volatile uint8_t  adc_rail_low_hit         = 0;
@@ -175,7 +188,9 @@ volatile uint16_t tb1ccr0_debug = 0;
 void     init_Clock_8MHz(void);
 void     init_GPIO(void);
 void     init_ADC(void);
+void     init_i2c_bq35100(void);
 uint16_t read_ADC_channel(uint16_t input_channel);
+uint8_t  bq_read_u16(uint8_t reg, uint16_t *value);
 void     init_DAC(void);
 void     init_Sine_Timer_10kHz_16samples(void);
 void     init_ADC_Capture_Timer(void);
@@ -251,6 +266,8 @@ void main(void)
     init_Clock_8MHz();
     init_GPIO();
     PM5CTL0 &= ~LOCKLPM5;       // unlock pins
+    __delay_cycles(BQ35100_WAKE_CYCLES);
+    init_i2c_bq35100();
     EM4325_SPI_Init();
     __bis_SR_register(GIE);     // enable global interrupts
 
@@ -564,6 +581,7 @@ void run_measurement_cycle(void)
     }
 
     measurement_debug_stage = 9U;
+    batt_i2c_error = bq_read_u16(BQ35100_CMD_VOLTAGE, (uint16_t *)&batt_voltage_mV);
     update_raw_export_words();
     measurement_debug_stage = 10U;
     iq_frontend_off();
@@ -582,7 +600,7 @@ void write_tag_payload(void)
     page_words[0] = temperature_tag_word;
     page_words[1] = phase_tag_word;
     page_words[2] = conductivity_tag_word;
-    page_words[3] = 0U;
+    page_words[3] = battery_tag_word;
 
     /* Let the analog front end and sensor rail fully settle off before
      * asking the tag IC to commit EEPROM. This gives the EM4325 the
@@ -596,15 +614,18 @@ void write_tag_payload(void)
     em4325_temp_write_status = page_write_status;
     em4325_phase_write_status = page_write_status;
     em4325_cond_write_status = page_write_status;
+    em4325_batt_write_status = page_write_status;
 
     page_read_status = EM4325_ReadPage(EM4325_USER_PAGE0_NUM, page_readback);
     em4325_temp_read_status = page_read_status;
     em4325_phase_read_status = page_read_status;
     em4325_cond_read_status = page_read_status;
+    em4325_batt_read_status = page_read_status;
 
     em4325_temp_readback_word  = page_readback[0];
     em4325_phase_readback_word = page_readback[1];
     em4325_cond_readback_word  = page_readback[2];
+    em4325_batt_readback_word  = page_readback[3];
 
     (void)EM4325_SetTransponderEnabled(1U);
 
@@ -692,11 +713,115 @@ void init_GPIO(void)
     P2DIR  |=  BIT4;
     P2OUT  |=  BIT4;
 
+    // P5.2 - BQ35100 battery gauge enable, held on after startup.
+    P5SEL0 &= ~BIT2;
+    P5SEL1 &= ~BIT2;
+    P5DIR  |=  BIT2;
+    P5OUT  |=  BIT2;
+
     // MUX control: P5.3=EN, P5.1=A1, P5.0=A0. Start disabled/low.
     P5SEL0 &= ~(BIT3 | BIT1 | BIT0);
     P5SEL1 &= ~(BIT3 | BIT1 | BIT0);
     P5DIR  |=  (BIT3 | BIT1 | BIT0);
     P5OUT  &= ~(BIT3 | BIT1 | BIT0);
+}
+
+
+/* ===========================================================================
+ *                          BQ35100 BATTERY GAUGE (I2C)
+ * =========================================================================== */
+void init_i2c_bq35100(void)
+{
+    P4SEL0 |=  (BIT6 | BIT7);     // P4.6 SDA, P4.7 SCL
+    P4SEL1 &= ~(BIT6 | BIT7);
+
+    UCB1CTLW0 = UCSWRST;
+    UCB1CTLW0 |= UCMST | UCMODE_3 | UCSYNC | UCSSEL__SMCLK;
+    UCB1BRW = 160;                // 8 MHz / 160 = 50 kHz
+    UCB1I2CSA = BQ35100_ADDR;
+    UCB1CTLW0 &= ~UCSWRST;
+}
+
+uint8_t bq_read_u16(uint8_t reg, uint16_t *value)
+{
+    uint8_t lsb;
+    uint8_t msb;
+    uint16_t timeout;
+
+    if (!value)
+        return 7U;
+
+    timeout = BQ35100_I2C_TIMEOUT_LOOPS;
+    while (UCB1CTLW0 & UCTXSTP)
+    {
+        if (--timeout == 0U)
+            return 8U;
+    }
+
+    UCB1I2CSA = BQ35100_ADDR;
+
+    UCB1CTLW0 |= UCTR | UCTXSTT;
+
+    timeout = BQ35100_I2C_TIMEOUT_LOOPS;
+    while (!(UCB1IFG & UCTXIFG0))
+    {
+        if (UCB1IFG & UCNACKIFG)
+        {
+            UCB1IFG &= ~UCNACKIFG;
+            UCB1CTLW0 |= UCTXSTP;
+            return 1U;
+        }
+        if (--timeout == 0U)
+            return 2U;
+    }
+
+    UCB1TXBUF = reg;
+
+    timeout = BQ35100_I2C_TIMEOUT_LOOPS;
+    while (!(UCB1IFG & UCTXIFG0))
+    {
+        if (--timeout == 0U)
+            return 3U;
+    }
+
+    UCB1CTLW0 &= ~UCTR;
+    UCB1CTLW0 |= UCTXSTT;
+
+    timeout = BQ35100_I2C_TIMEOUT_LOOPS;
+    while (UCB1CTLW0 & UCTXSTT)
+    {
+        if (--timeout == 0U)
+            return 4U;
+    }
+
+    timeout = BQ35100_I2C_TIMEOUT_LOOPS;
+    while (!(UCB1IFG & UCRXIFG0))
+    {
+        if (--timeout == 0U)
+            return 5U;
+    }
+    lsb = UCB1RXBUF;
+
+    UCB1CTLW0 |= UCTXSTP;
+
+    timeout = BQ35100_I2C_TIMEOUT_LOOPS;
+    while (!(UCB1IFG & UCRXIFG0))
+    {
+        if (--timeout == 0U)
+            return 6U;
+    }
+    msb = UCB1RXBUF;
+
+    timeout = BQ35100_I2C_TIMEOUT_LOOPS;
+    while (UCB1CTLW0 & UCTXSTP)
+    {
+        if (--timeout == 0U)
+            return 9U;
+    }
+
+    *value = ((uint16_t)msb << 8) | lsb;
+
+    return 0U;
 }
 
 
@@ -997,6 +1122,7 @@ void update_raw_export_words(void)
     int16_t phase_clamped = phase_delay_signed_deg_x10;
 
     temperature_tag_word = adc_temp_raw;
+    battery_tag_word = batt_voltage_mV;
     conductivity_tag_word = moisture_signal_raw & 0x0FFFU;
     if (feedback_low_enabled)
         conductivity_tag_word |= 0x8000U;

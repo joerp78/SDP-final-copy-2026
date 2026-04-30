@@ -1,7 +1,7 @@
 [
    {
-      "directory" : "C:/Users/georg/Desktop/sdp26-26-main/software/src/MSP430/MSP430_test/Debug",
-      "command"   : "clang++ -I\"C:/ti/ccs2010/ccs/ccs_base/msp430/include\" -I\"C:/Users/georg/Desktop/sdp26-26-main/software/src/MSP430/MSP430_test\" -I\"C:/Users/georg/Desktop/sdp26-26-main/software/src/MSP430/MSP430_test/include\" -I\"C:/ti/ccs2010/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8",
-      "file"      : "C:/Users/georg/Desktop/sdp26-26-main/software/src/MSP430/MSP430_test/main.c"
+      "directory" : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/Batterycode only/Debug",
+      "command"   : "clang++ -I\"C:/ti/ccs2050/ccs/ccs_base/msp430/include\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/Batterycode only\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/Batterycode only/include\" -I\"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8 -xc",
+      "file"      : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/Batterycode only/main.c"
    }
 ]
