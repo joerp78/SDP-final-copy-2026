@@ -278,6 +278,7 @@ void main(void)
             }
 
             reset_ADC_Capture();
+            /*
             peripherals_shutdown();
 
             P2IFG &= ~BIT1;
@@ -287,6 +288,7 @@ void main(void)
             }
 
             peripherals_wakeup();
+            */ 
         }
 
         __no_operation();

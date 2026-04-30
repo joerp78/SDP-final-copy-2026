@@ -82,7 +82,7 @@ public class PlantService {
         List<Plant> latest = new ArrayList<>();
 
         for (Long pid : plantIds) {
-            repo.findTopByPlantIdAndTemperatureIsNotNullOrderByTimestampDesc(pid)
+            repo.findTopByPlantIdOrderByTimestampDesc(pid)
                     .ifPresent(latest::add);
         }
 
@@ -95,7 +95,7 @@ public class PlantService {
      * (not the database row PK).
      */
     public Plant getById(Long plantId) {
-        return repo.findTopByPlantIdAndTemperatureIsNotNullOrderByTimestampDesc(plantId)
+        return repo.findTopByPlantIdOrderByTimestampDesc(plantId)
                 .orElseThrow(() -> new NoSuchElementException(
                         "No plant found with plantId " + plantId));
     }
