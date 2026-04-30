@@ -53,7 +53,7 @@ def compute_conductivity(cond_word: int) -> float:
       - raw pk-pk < 10 mV -> 0.0%
       - if feedback_low_enabled == 1:
           10 mV  -> 65.0%
-          2000 mV -> 100.0%
+          2500 mV -> 100.0%
       - if feedback_low_enabled == 0:
           10 mV  -> 0.0%
           2500 mV -> 64.0%
@@ -74,9 +74,9 @@ def compute_conductivity(cond_word: int) -> float:
         return 0.0
 
     if feedback_low_enabled:
-        if amplitude_mv >= 2000.0:
+        if amplitude_mv >= 2500.0:
             return 100.0
-        percent = 65.0 + ((amplitude_mv - 10.0) * (100.0 - 65.0) / (2000.0 - 10.0))
+        percent = 65.0 + ((amplitude_mv - 10.0) * (100.0 - 65.0) / (2500.0 - 10.0))
         return round(percent, 1)
 
     if amplitude_mv >= 2500.0:
