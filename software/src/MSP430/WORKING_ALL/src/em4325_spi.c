@@ -174,6 +174,25 @@ uint8_t EM4325_RequestStatus(void)
     return status;
 }
 
+uint8_t EM4325_Reboot(void)
+{
+    uint8_t status;
+
+    CS_LOW();
+    __delay_cycles(8);
+
+    spi_txrx(EM4325_CMD_SPI_BOOT);
+    status = wait_status_byte(EM4325_STATUS_WAIT_READ_BYTES);
+
+    CS_HIGH();
+    delay_us_approx(100);
+
+    if ((status & 0x80U) && (status & 0x04U))
+        status = wait_ready_status(200U);
+
+    return status;
+}
+
 uint8_t EM4325_SetTransponderEnabled(uint8_t enable)
 {
     uint8_t status;
