@@ -31,7 +31,10 @@ import requests
 import serial
 
 from config import API_URL, API_TIMEOUT_SEC, FORCE_LTE, EPC_PLANT_MAP
-from hub_sensors import sample_hub
+try:
+    from hub_sensors import sample_hub
+except ImportError:
+    sample_hub = None
 
 
 # -----------------------------------------------------------------------------
@@ -46,7 +49,7 @@ def compute_conductivity(cond_word: int) -> float:
       - bit 15: feedback_low_enabled
       - bits 11:0: raw peak-to-peak amplitude in 12-bit ADC counts
 
-    Conversion rules provided by the firmware team:
+    Conversion rules provided by the fi422rmware team:
       - raw pk-pk < 10 mV -> 0.0%
       - if feedback_low_enabled == 1:
           10 mV  -> 65.0%
@@ -119,6 +122,27 @@ def compute_moisture(phase_word: int) -> float:
     return round(percent, 1)
 
 
+def compute_battery(batt_word: int) -> float:
+    """
+    Convert the raw battery voltage word from millivolts to a battery percent.
+
+    Conversion rules:
+      - 2500 mV -> 0.0%
+      - 3000 mV -> 100.0%
+      - values outside that range are clamped
+
+    Returns:
+        Battery percentage rounded to 1 decimal place.
+    """
+    if batt_word <= 2500:
+        return 0.0
+    if batt_word >= 3000:
+        return 100.0
+
+    percent = (batt_word - 2500) * 100.0 / (3000 - 2500)
+    return round(percent, 1)
+
+
 def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, dict]]:
     """
     Decode a 4-word plant sensor blob from user memory.
@@ -146,9 +170,11 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
 
     # Temperature is still passed through with the legacy raw*0.01 scaling used
     # elsewhere in the hub path. Phase and conductivity now come from packed
-    # firmware words and are converted into percentages by the helpers above.
+    # firmware words, while battery is raw mV. All three are converted into
+    # percentages by the helpers above.
     conductivity_pct = compute_conductivity(cond_raw)
     moisture_pct = compute_moisture(phase_raw)
+    battery_pct = compute_battery(batt_raw)
 
     return plant_id, {
         "plantId":          plant_id,
@@ -156,7 +182,7 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
         "temperature":      round(temp_raw  * 0.01, 2),
         "soilConductivity": conductivity_pct,
         "soilMoisture":     moisture_pct,
-        "battery":          batt_raw,    # raw mV, no scaling
+        "battery":          battery_pct,
         "timestamp":        ts.replace(tzinfo=None).isoformat(timespec="milliseconds"),
     }
 
@@ -282,9 +308,9 @@ def send_rfid_events(
         plant_readings.setdefault(plant_id, []).append(payload)
         print(f"[INFO] EPC {epc} -> plant {plant_id} | "
               f"temp={payload['temperature']} C  "
-              f"conductivity={payload['soilConductivity']} uS/cm  "
+              f"conductivity={payload['soilConductivity']} %  "
               f"moisture={payload['soilMoisture']} %  "
-              f"battery={payload['battery']} mV")
+              f"battery={payload['battery']} %")
 
     if not plant_readings:
         print("[INFO] No decodable readings to send.")

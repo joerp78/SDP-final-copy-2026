@@ -14,7 +14,8 @@ class Program
     static readonly HashSet<string> AllowedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
     "0080B0443C00000012787622",
-    "0080B0443C00000012787627"
+    "0080B0443C00000012787627",
+    "0080B0443C000000129DA3B8"
     };
 
     class TagState
@@ -73,7 +74,7 @@ class Program
             Console.WriteLine("Logger initialized");
 
             // ---- RFID READER SETUP ----
-            _r = Reader.Create("tmr:///com10");   // change COM if needed
+            _r = Reader.Create("tmr:///com11");   // change COM if needed
             _r.Connect();
             Console.WriteLine("Connected to RFID Reader");
 

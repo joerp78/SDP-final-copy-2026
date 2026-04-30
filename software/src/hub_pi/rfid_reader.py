@@ -31,6 +31,8 @@ from config import (
     TEST_DATA,
 )
 from tm6e         import connect_reader, epc_to_str, read_user_memory, build_event
+from event_sender import compute_conductivity, compute_moisture
+import struct
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  GRACEFUL SHUTDOWN
@@ -152,8 +154,33 @@ def main() -> None:
                         if user_hex:
                             unique_tags[epc]["user_mem"]      = user_hex
                             unique_tags[epc]["user_mem_read"] = True
+
                             print(f"           USER[0..{USER_MEM_WORDS - 1}] = {user_hex}")
 
+                            try:
+                                raw = bytes.fromhex(user_hex)
+
+                                if len(raw) >= 8:
+                                    temp_raw, phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
+
+                                    temperature = round(temp_raw * 0.01, 2)
+                                    moisture    = compute_moisture(phase_raw)
+                                    conductivity = compute_conductivity(cond_raw)
+                                    battery     = batt_raw
+
+                                    print(
+                                        f"           DECODED -> "
+                                        f"Temp: {temperature} °C | "
+                                        f"Moisture: {moisture} % | "
+                                        f"Conductivity: {conductivity} % | "
+                                        f"Battery: {battery} mV"
+                                    )
+                                else:
+                                    print("           [WARN] User memory too short to decode")
+
+                            except Exception as ex:
+                                print(f"           [ERROR] Failed to decode user memory: {ex}")
+                
                 time.sleep(0.05)
 
             # Build one event per unique EPC
