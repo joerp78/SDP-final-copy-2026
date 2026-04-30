@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PCBnode Debug",
+            "type": "ccs-debug",
+            "request": "launch"
+        },
+        {
+            "name": "PCBnode copy",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "PCBnode copy",
+                "resourceId": "/PCBnode copy"
+            }
+        },
+        {
+            "name": "MSP430FR2355.ccxml",
+            "type": "ccs-debug",
+            "request": "launch",
+            "targetConfig": "${workspaceFolder}\\targetConfigs\\MSP430FR2355.ccxml"
+        },
+        {
+            "name": "pcb-code copy",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "pcb-code copy",
+                "resourceId": "/pcb-code copy"
+            }
+        }
+    ]
+}

@@ -28,6 +28,7 @@
 #define THERMISTOR_AVG_SAMPLES    (8U)
 #define IQ_AVG_CAPTURES           (4U)
 #define IQ_CAPTURE_TIMEOUT_LOOPS  (1000000UL)
+#define ADC_CONVERSION_TIMEOUT_LOOPS (50000UL)
 #define CONDUCTIVITY_AIR_RAW     (51U)
 #define CONDUCTIVITY_WATER_RAW   (4094U)
 #define PHASE_VALID_MIN_PKPK_RAW (8U)
@@ -151,6 +152,18 @@ volatile uint32_t rfid_wake_count = 0;
 volatile uint32_t measurement_cycle_count = 0;
 volatile uint8_t  measurement_timeout_count = 0;
 volatile uint8_t  iq_avg_valid_count = 0;
+volatile uint8_t  measurement_debug_stage = 0;
+volatile uint32_t adc_timeout_count = 0;
+volatile uint16_t adc_timeout_channel = 0;
+volatile uint8_t  iq_debug_stage = 0;
+volatile uint32_t timer1_isr_count = 0;
+volatile uint32_t timer1_adc_timeout_seen = 0;
+volatile uint16_t iq_wait_last_index = 0;
+volatile uint16_t iq_wait_last_tb1r = 0;
+volatile uint16_t iq_wait_sr = 0;
+volatile uint16_t tb1ctl_debug = 0;
+volatile uint16_t tb1cctl0_debug = 0;
+volatile uint16_t tb1ccr0_debug = 0;
 
 /* ---- Prototypes ---- */
 void     init_Clock_8MHz(void);
@@ -383,16 +396,23 @@ uint8_t wait_for_iq_capture(void)
 {
     uint32_t timeout = IQ_CAPTURE_TIMEOUT_LOOPS;
 
+    iq_debug_stage = 2U;
     while (!adc_capture_done && timeout--)
-        ;
+    {
+        iq_wait_last_index = adc_capture_index;
+        iq_wait_last_tb1r = TB1R;
+        iq_wait_sr = __get_SR_register();
+    }
 
     if (!adc_capture_done)
     {
+        iq_debug_stage = 3U;
         measurement_timeout_count++;
         TB1CCTL0 &= ~CCIE;
         return 0U;
     }
 
+    iq_debug_stage = 4U;
     return 1U;
 }
 
@@ -402,10 +422,12 @@ uint8_t run_iq_capture_with_feedback(void)
 
     for (retry = 0U; retry < 4U; retry++)
     {
+        iq_debug_stage = 1U;
         reset_ADC_Capture();
         if (!wait_for_iq_capture())
             return 0U;
 
+        iq_debug_stage = 5U;
         feedback_last_min_raw = adc_capture_min_raw;
         feedback_last_max_raw = adc_capture_max_raw;
         feedback_last_pkpk_raw = adc_capture_pkpk_raw;
@@ -416,8 +438,10 @@ uint8_t run_iq_capture_with_feedback(void)
         adc_capture_railed =
             (adc_rail_low_hit || adc_rail_high_hit) ? 1U : 0U;
 
+        iq_debug_stage = 6U;
         process_ADC_Capture();
         feedback_last_amplitude_raw = moisture_signal_raw;
+        iq_debug_stage = 7U;
         measured_vdd_mv = measure_vdd_mv();
         if (measured_vdd_mv != 0U)
             moisture_signal_mV = (uint16_t)(((uint32_t)moisture_signal_raw * measured_vdd_mv) / 4095U);
@@ -486,8 +510,10 @@ void run_measurement_cycle(void)
     int32_t phase_sum = 0L;
     uint8_t phase_valid_count = 0U;
 
+    measurement_debug_stage = 1U;
     sensors_power_on();
 
+    measurement_debug_stage = 2U;
     thermistor_input_on();
     init_ADC();
     for (i = 0U; i < THERMISTOR_AVG_SAMPLES; i++)
@@ -497,10 +523,12 @@ void run_measurement_cycle(void)
     temperature_F_x10 = (temperature_C_x10 * 9 / 5) + 320;
     thermistor_input_off();
 
+    measurement_debug_stage = 3U;
     iq_frontend_on();
     iq_avg_valid_count = 0U;
     for (i = 0U; i < IQ_AVG_CAPTURES; i++)
     {
+        measurement_debug_stage = (uint8_t)(4U + i);
         if (run_iq_capture_with_feedback())
         {
             moisture_sum += moisture_signal_raw;
@@ -513,6 +541,7 @@ void run_measurement_cycle(void)
         }
     }
 
+    measurement_debug_stage = 8U;
     if (iq_avg_valid_count != 0U)
     {
         moisture_signal_raw = (uint16_t)(moisture_sum / iq_avg_valid_count);
@@ -530,9 +559,13 @@ void run_measurement_cycle(void)
         phase_delay_valid = 0U;
     }
 
+    measurement_debug_stage = 9U;
     update_raw_export_words();
+    measurement_debug_stage = 10U;
     iq_frontend_off();
+    measurement_debug_stage = 11U;
     sensors_power_off();
+    measurement_debug_stage = 12U;
 }
 
 void write_tag_payload(void)
@@ -649,10 +682,23 @@ void init_ADC(void)
 
 uint16_t read_ADC_channel(uint16_t input_channel)
 {
+    uint32_t timeout = ADC_CONVERSION_TIMEOUT_LOOPS;
+
     ADCCTL0 &= ~ADCENC;
     ADCMCTL0 = input_channel | ADCSREF_0;
+    ADCIFG  &= ~ADCIFG0;
     ADCCTL0 |= ADCENC | ADCSC;          // enable + start conversion
-    while (!(ADCIFG & ADCIFG0));         // wait for completion
+    while (!(ADCIFG & ADCIFG0) && timeout--)
+        ;
+
+    if (!(ADCIFG & ADCIFG0))
+    {
+        adc_timeout_count++;
+        adc_timeout_channel = input_channel;
+        ADCCTL0 &= ~ADCENC;
+        return ADCMEM0;
+    }
+
     ADCIFG  &= ~ADCIFG0;                // clear flag
     ADCCTL0 &= ~ADCENC;                 // disable (required before next config change)
     return ADCMEM0;
@@ -829,8 +875,16 @@ void reset_ADC_Capture(void)
     adc_capture_done     = 0;
 
     TB1CTL   = TBSSEL__SMCLK | MC__STOP | TBCLR;
+    TB1CCTL0 = 0U;
+    TB1CCTL0 &= ~CCIFG;
+    TB1CCR0  = ADC_CAPTURE_CCR0;
     TB1CCTL0 = CCIE;
     TB1CTL   = TBSSEL__SMCLK | MC__UP | TBCLR;
+
+    __bis_SR_register(GIE);
+    tb1ctl_debug = TB1CTL;
+    tb1cctl0_debug = TB1CCTL0;
+    tb1ccr0_debug = TB1CCR0;
 }
 
 uint32_t isqrt_u64(uint64_t value)
@@ -959,6 +1013,9 @@ __interrupt void TIMER1_B0_ISR(void)
 {
     uint16_t sample;
     uint8_t  phase_tag;
+    uint32_t adc_timeout_before;
+
+    timer1_isr_count++;
 
     if (adc_capture_done)
     {
@@ -967,7 +1024,10 @@ __interrupt void TIMER1_B0_ISR(void)
     }
 
     phase_tag = sine_index;
+    adc_timeout_before = adc_timeout_count;
     sample = read_ADC_channel(ADCINCH_1);
+    if (adc_timeout_count != adc_timeout_before)
+        timer1_adc_timeout_seen++;
     adc_probe_raw = sample;
     adc_probe_mV  = (uint16_t)(((uint32_t)sample * 3000U) / 4095U);
     adc_probe_count++;
