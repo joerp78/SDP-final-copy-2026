@@ -175,13 +175,15 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
     conductivity_pct = compute_conductivity(cond_raw)
     moisture_pct = compute_moisture(phase_raw)
     battery_pct = compute_battery(batt_raw)
+    temp_c = round((temp_raw & 0x0FFF) / 10.0, 1)
+
 
     return plant_id, {
         "plantId":          plant_id,
         "name":             "",          # managed server-side via POST /api/plants
-        "temperature":      round(temp_raw  * 0.01, 2),
+        "temperature":      temp_c,
         "soilConductivity": conductivity_pct,
-        "soilMoisture":     moisture_pct,
+        "soilMoisture":     moisture_pct if moisture_pct >= 0 else None,
         "battery":          battery_pct,
         "timestamp":        ts.replace(tzinfo=None).isoformat(timespec="milliseconds"),
     }
