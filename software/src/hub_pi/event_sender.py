@@ -86,39 +86,29 @@ def compute_conductivity(cond_word: int) -> float:
     return round(percent, 1)
 
 
-def compute_moisture(phase_word: int) -> float:
+def compute_moisture(moisture_word: int) -> float:
     """
-    Decode the packed phase word and convert it to a moisture percent.
+    Decode the packed RC moisture word and convert it to a moisture percent.
 
     Tag encoding:
-      - bit 15: phase_delay_valid
-      - bits 11:0: signed phase delay in deg_x10 (12-bit two's complement)
+      - bits 11:0: average RC count divided by 16
 
-    Conversion rules provided by the firmware team:
-      - phase_delay_valid == 0 -> -1.0%
-      - phase > 30 deg  -> 100.0%
-      - phase < -170 deg -> 0.0%
-      - linearly interpolate in between
+    Conversion rules:
+      - raw value 0   -> 0.0%
+      - raw value 200 -> 100.0%
+      - values outside that range are clamped
 
     Returns:
-        Moisture percentage rounded to 1 decimal place, or -1.0 when invalid.
+        Moisture percentage rounded to 1 decimal place.
     """
-    phase_delay_valid = (phase_word & 0x8000) != 0
-    if not phase_delay_valid:
-        return -1.0
+    rc_raw = moisture_word & 0x0FFF
 
-    phase_raw_12 = phase_word & 0x0FFF
-    if phase_raw_12 & 0x0800:
-        phase_raw_12 -= 0x1000
-
-    phase_deg = phase_raw_12 / 10.0
-
-    if phase_deg >= 30.0:
-        return 100.0
-    if phase_deg <= -170.0:
+    if rc_raw <= 0:
         return 0.0
+    if rc_raw >= 200:
+        return 100.0
 
-    percent = (phase_deg - (-170.0)) * 100.0 / (30.0 - (-170.0))
+    percent = rc_raw * 100.0 / 200.0
     return round(percent, 1)
 
 
@@ -161,29 +151,21 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
         print(f"[WARN] EPC {epc}: user memory too short ({len(raw)} bytes, need 8).")
         return None
 
-    temp_raw, phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
-
-    plant_id = EPC_PLANT_MAP.get(epc)
-    if plant_id is None:
-        print(f"[WARN] EPC {epc}: not found in EPC_PLANT_MAP - skipped.")
-        return None
+    temp_raw, _phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
 
     # Temperature is still passed through with the legacy raw*0.01 scaling used
-    # elsewhere in the hub path. Phase and conductivity now come from packed
-    # firmware words, while battery is raw mV. All three are converted into
-    # percentages by the helpers above.
-    conductivity_pct = compute_conductivity(cond_raw)
-    moisture_pct = compute_moisture(phase_raw)
+    # elsewhere in the hub path. The old phase word is ignored temporarily.
+    # Conductivity is temporarily reported as a simple status string.
+    conductivity_status = "N/A"
+    moisture_pct = compute_moisture(cond_raw)
     battery_pct = compute_battery(batt_raw)
-    temp_c = round((temp_raw & 0x0FFF) / 10.0, 1)
-
 
     return plant_id, {
         "plantId":          plant_id,
-        "name":             "",          # managed server-side via POST /api/plants
-        "temperature":      temp_c,
-        "soilConductivity": conductivity_pct,
-        "soilMoisture":     moisture_pct if moisture_pct >= 0 else None,
+        "name":             "",
+        "temperature":      round(temp_raw * 0.01, 2),
+        "soilConductivity": conductivity_status,
+        "soilMoisture":     moisture_pct,
         "battery":          battery_pct,
         "timestamp":        ts.replace(tzinfo=None).isoformat(timespec="milliseconds"),
     }
