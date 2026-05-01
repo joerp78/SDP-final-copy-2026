@@ -1,103 +1,90 @@
 package BLOSSM.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * DTO that shapes historical data into the format Chart.js expects.
+ * Time-series payload for the dashboard (Chart.js).
  *
- * Never stored in the database — built by services, serialised to JSON,
- * and consumed by the browser's JavaScript.
+ * Hub readings populate: labels, lux, brightness, humidity, temperature,
+ *                        dominantChannel.
+ * Plant readings populate: labels, temperature, soilMoisture, soilConductivity,
+ *                          battery.
  *
- * Uses @JsonInclude so that plant-only fields (temperature, etc.) don't
- * appear in hub JSON, and vice versa.
- *
- * ── Plant JSON shape ──────────────────────
- * {
- *   "labels":           ["08:00","08:05"],
- *   "temperature":      [22.5, 23.1],
- *   "soilMoisture":     [45.0, 44.2],
- *   "soilConductivity": [1.20, 1.25]
- * }
- *
- * ── Hub JSON shape ────────────────────────
- * {
- *   "labels":   ["08:00","08:05"],
- *   "light":    [850.0, 920.0],
- *   "humidity": [62.0, 60.5]
- * }
+ * Unused arrays are omitted from the JSON via @JsonInclude(NON_EMPTY) so the
+ * front-end can detect which series are available.
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
-public record ReadingJson(
-        List<String> labels,
-        List<Double> temperature,
-        List<Double> soilMoisture,
-        List<Double> soilConductivity,
-        List<Double> battery,
-        List<Double> light,
-        List<Double> humidity
-) {
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
+public class ReadingJson {
 
-    // ── Formatters ──────────────────────────────────────
-
-    private static final DateTimeFormatter TIME_ONLY =
+    private static final DateTimeFormatter LABEL_FMT =
             DateTimeFormatter.ofPattern("HH:mm");
 
-    private static final DateTimeFormatter DATE_TIME =
-            DateTimeFormatter.ofPattern("MMM dd HH:mm");
+    // Shared
+    private List<String> labels = new ArrayList<>();
 
-    // ── Factory: build from a list of Plant readings ────
+    // Hub series
+    private List<Double>  lux              = new ArrayList<>();
+    private List<Integer> brightness       = new ArrayList<>();
+    private List<Double>  humidity         = new ArrayList<>();
+    private List<Double>  temperature      = new ArrayList<>();
+    private List<String>  dominantChannel  = new ArrayList<>();
 
-    public static ReadingJson fromPlants(List<Plant> readings) {
-        List<String> labels         = new ArrayList<>();
-        List<Double> temps          = new ArrayList<>();
-        List<Double> moistures      = new ArrayList<>();
-        List<Double> conductivities = new ArrayList<>();
-        List<Double> batteries      = new ArrayList<>();
+    // Plant series
+    private List<Double> soilMoisture     = new ArrayList<>();
+    private List<Double> soilConductivity = new ArrayList<>();
+    private List<Double> battery          = new ArrayList<>();
 
-        for (Plant r : readings) {
-            if (r.getTimestamp() == null) continue;          // skip registration rows
-            if (r.getTemperature() == null
-                    && r.getSoilMoisture() == null
-                    && r.getSoilConductivity() == null) continue;
+    public ReadingJson() { }
 
-            labels.add(r.getTimestamp().format(TIME_ONLY));
-            temps.add(r.getTemperature());
-            moistures.add(r.getSoilMoisture());
-            conductivities.add(r.getSoilConductivity());
-            batteries.add(r.getBattery());
-        }
-
-        return new ReadingJson(
-                labels, temps, moistures, conductivities,
-                batteries,
-                null,   // light    → omitted from JSON
-                null    // humidity → omitted from JSON
-        );
-    }
-
-    // ── Factory: build from a list of Hub readings ──────
-
-    public static ReadingJson fromHub(List<Hub> readings) {
-        List<String> labels     = new ArrayList<>();
-        List<Double> lights     = new ArrayList<>();
-        List<Double> humidities = new ArrayList<>();
-
-        for (Hub r : readings) {
-            labels.add(r.getTimestamp().format(TIME_ONLY));
-            lights.add(r.getLight());
-            humidities.add(r.getHumidity());
-        }
-
-        return new ReadingJson(labels, null, null, null, null, lights, humidities);
-
-    }
-
-    // ── Empty instance for when there's no data ─────────
+    // ── Factories ───────────────────────────────────────
 
     public static ReadingJson empty() {
-        return new ReadingJson(List.of(), null, null, null, null, null, null);
+        return new ReadingJson();
     }
+
+    public static ReadingJson fromHub(List<Hub> readings) {
+        ReadingJson out = new ReadingJson();
+        for (Hub r : readings) {
+            out.labels.add(formatLabel(r.getTimestamp()));
+            out.lux.add(r.getLux());
+            out.brightness.add(r.getBrightness());
+            out.humidity.add(r.getHumidity());
+            out.temperature.add(r.getTemperature());
+            out.dominantChannel.add(r.getDominantChannel());
+        }
+        return out;
+    }
+
+    public static ReadingJson fromPlant(List<Plant> readings) {
+        ReadingJson out = new ReadingJson();
+        for (Plant p : readings) {
+            out.labels.add(formatLabel(p.getTimestamp()));
+            out.temperature.add(p.getTemperature());
+            out.soilMoisture.add(p.getSoilMoisture());
+            out.soilConductivity.add(p.getSoilConductivity());
+            out.battery.add(p.getBattery());
+        }
+        return out;
+    }
+
+    private static String formatLabel(LocalDateTime ts) {
+        return ts == null ? "" : ts.format(LABEL_FMT);
+    }
+
+    // ── Getters (Jackson) ───────────────────────────────
+
+    public List<String>  getLabels()           { return labels; }
+    public List<Double>  getLux()              { return lux; }
+    public List<Integer> getBrightness()       { return brightness; }
+    public List<Double>  getHumidity()         { return humidity; }
+    public List<Double>  getTemperature()      { return temperature; }
+    public List<String>  getDominantChannel()  { return dominantChannel; }
+    public List<Double>  getSoilMoisture()     { return soilMoisture; }
+    public List<Double>  getSoilConductivity() { return soilConductivity; }
+    public List<Double>  getBattery()          { return battery; }
 }

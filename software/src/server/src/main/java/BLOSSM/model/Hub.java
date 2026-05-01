@@ -16,9 +16,27 @@ public class Hub {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Double light;        // brightness % (0.0 - 100.0)
     private Double humidity;     // %
     private Double temperature;  // deg C
+
+    // AS7343 spectral readings
+    private Double  lux;                 // estimated illuminance (R/G/B weighted)
+    private Integer brightness;          // raw R+G+B sum from AS7343
+    private String  colorLabel;          // e.g. "white / neutral", "red / warm"
+    private String  spectrumLabel;       // e.g. "mostly visible light"
+    private String  dominantWavelength;  // e.g. "~550 nm"
+    private String  dominantChannel;     // e.g. "VIS3"
+
+    /**
+     * Full 12-channel raw counts, stored as a JSON object string.
+     * Example: {"FZ":12,"FY":18,"FXL":25,"NIR":40,"VIS1":30,...}
+     *
+     * Stored as TEXT to avoid baking the AS7343's channel layout into the
+     * schema - if the sensor is ever swapped, only the column contents change.
+     */
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String channelsJson;
 
     @Column(nullable = false)
     private LocalDateTime timestamp;
@@ -27,11 +45,26 @@ public class Hub {
 
     protected Hub() { }
 
-    public Hub(Double light, Double humidity, Double temperature, LocalDateTime timestamp) {
-        this.light       = light;
-        this.humidity    = humidity;
-        this.temperature = temperature;
-        this.timestamp   = timestamp;
+    public Hub(Double temperature,
+               Double humidity,
+               Double lux,
+               Integer brightness,
+               String colorLabel,
+               String spectrumLabel,
+               String dominantWavelength,
+               String dominantChannel,
+               String channelsJson,
+               LocalDateTime timestamp) {
+        this.temperature        = temperature;
+        this.humidity           = humidity;
+        this.lux                = lux;
+        this.brightness         = brightness;
+        this.colorLabel         = colorLabel;
+        this.spectrumLabel      = spectrumLabel;
+        this.dominantWavelength = dominantWavelength;
+        this.dominantChannel    = dominantChannel;
+        this.channelsJson       = channelsJson;
+        this.timestamp          = timestamp;
     }
 
     // ── Lifecycle callback ──────────────────────────────
@@ -64,14 +97,32 @@ public class Hub {
     public Long getId()                              { return id; }
     public void setId(Long id)                       { this.id = id; }
 
-    public Double getLight()                         { return light; }
-    public void setLight(Double light)               { this.light = light; }
-
     public Double getHumidity()                      { return humidity; }
     public void setHumidity(Double humidity)         { this.humidity = humidity; }
 
     public Double getTemperature()                   { return temperature; }
     public void setTemperature(Double temperature)   { this.temperature = temperature; }
+
+    public Double getLux()                           { return lux; }
+    public void setLux(Double lux)                   { this.lux = lux; }
+
+    public Integer getBrightness()                   { return brightness; }
+    public void setBrightness(Integer brightness)    { this.brightness = brightness; }
+
+    public String getColorLabel()                    { return colorLabel; }
+    public void setColorLabel(String colorLabel)     { this.colorLabel = colorLabel; }
+
+    public String getSpectrumLabel()                 { return spectrumLabel; }
+    public void setSpectrumLabel(String s)           { this.spectrumLabel = s; }
+
+    public String getDominantWavelength()                 { return dominantWavelength; }
+    public void setDominantWavelength(String w)           { this.dominantWavelength = w; }
+
+    public String getDominantChannel()               { return dominantChannel; }
+    public void setDominantChannel(String c)         { this.dominantChannel = c; }
+
+    public String getChannelsJson()                  { return channelsJson; }
+    public void setChannelsJson(String channelsJson) { this.channelsJson = channelsJson; }
 
     public LocalDateTime getTimestamp()                         { return timestamp; }
     public void setTimestamp(LocalDateTime timestamp)           { this.timestamp = timestamp; }
@@ -79,9 +130,14 @@ public class Hub {
     @Override
     public String toString() {
         return "Hub{id=" + id
-                + ", light=" + light
-                + ", humidity=" + humidity
                 + ", temperature=" + temperature
+                + ", humidity=" + humidity
+                + ", lux=" + lux
+                + ", brightness=" + brightness
+                + ", dominantChannel=" + dominantChannel
+                + ", dominantWavelength=" + dominantWavelength
+                + ", colorLabel=" + colorLabel
+                + ", spectrumLabel=" + spectrumLabel
                 + ", timestamp=" + timestamp + '}';
     }
 }
