@@ -1,0 +1,12 @@
+[
+   {
+      "directory" : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss/Debug",
+      "command"   : "clang++ -I\"C:/ti/ccs2050/ccs/ccs_base/msp430/include\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss/include\" -I\"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8 -xc",
+      "file"      : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss/main.c"
+   },
+   {
+      "directory" : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss/Debug",
+      "command"   : "clang++ -I\"C:/ti/ccs2050/ccs/ccs_base/msp430/include\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss\" -I\"C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss/include\" -I\"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430FR2355__ -D_FRWP_ENABLE -D_INFO_FRWP_ENABLE -D__ENABLE_GUI_COMM=1 -DGLOBAL_Q=8 -xc",
+      "file"      : "C:/Users/calgoldman71/OneDrive/Documents/GitHub/sdp26-26/software/src/MSP430/palm treeessss/src/em4325_spi.c"
+   }
+]
