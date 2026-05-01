@@ -23,6 +23,21 @@
                 "name": "MSP430_test",
                 "resourceId": "/MSP430_test"
             }
+        },
+        {
+            "name": "MSP430FR2355.ccxml",
+            "type": "ccs-debug",
+            "request": "launch",
+            "targetConfig": "${workspaceFolder}\\WORKING_ALL\\targetConfigs\\MSP430FR2355.ccxml"
+        },
+        {
+            "name": "WORKING_ALL",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "WORKING_ALL",
+                "resourceId": "/WORKING_ALL"
+            }
         }
     ]
 }

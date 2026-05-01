@@ -50,6 +50,7 @@
  *   Call once after GPIO unlock.
  */
 void EM4325_SPI_Init(void);
+uint8_t EM4325_Reboot(void);
 uint8_t EM4325_RequestStatus(void);
 uint8_t EM4325_SetTransponderEnabled(uint8_t enable);
 
