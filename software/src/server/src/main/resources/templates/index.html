@@ -528,11 +528,6 @@
                               th:classappend="${plant.status}"
                               th:text="${plant.status}">Healthy</span>
                     </div>
-                    <span th:if="${plant.battery != null}"
-                          style="margin-left:auto; font-size:0.75rem; font-weight:600;
-                                    color:#40916c; background:#d8f3dc; padding:2px 8px;
-                                    border-radius:50px; white-space:nowrap;"
-                          th:text="'🔋 ' + #numbers.formatDecimal(plant.battery,1,0) + '%'">🔋 85%</span>
                 </div>
 
                 <!-- Metrics -->
@@ -563,20 +558,18 @@
                                         ? #numbers.formatDecimal(plant.soilMoisture,1,1) + ' %'
                                         : '—'}">45.0 %</span>
                     </div>
-                        <!-- Soil Conductivity -->
-                        <div class="metric-row">
-                            <div class="metric-icon conductivity">
-                                <svg viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                                </svg>
-                            </div>
-                            <span class="metric-label">Conductivity</span>
-                            <span class="metric-value"
-                                  th:text="${plant.soilConductivity != null
-                        ? #numbers.formatDecimal(plant.soilConductivity,1,2) + ' %'
-                        : '—'}">1.20 %</span>
+                    <!-- Soil Conductivity -->
+                    <div class="metric-row">
+                        <div class="metric-icon conductivity">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                            </svg>
                         </div>
-                        <!-- Battery -->
+                        <span class="metric-label">Conductivity</span>
+                        <span class="metric-value"
+                              th:text="${plant.soilConductivity != null
+                                        ? #numbers.formatDecimal(plant.soilConductivity,1,2) + ' %'
+                                        : '—'}">1.20 %</span>
                         <div class="metric-row">
                             <div class="metric-icon battery">
                                 <svg viewBox="0 0 24 24" fill="currentColor">
@@ -586,9 +579,10 @@
                             <span class="metric-label">Battery</span>
                             <span class="metric-value"
                                   th:text="${plant.battery != null
-                        ? #numbers.formatDecimal(plant.battery,1,1) + ' %'
-                        : '—'}">85.0 %</span>
+                    ? #numbers.formatDecimal(plant.battery,1,1) + ' %'
+                    : '—'}">85.0 %</span>
                         </div>
+                    </div>
                 </div>
 
                 <!-- Footer -->
@@ -690,8 +684,8 @@
      *     "labels":           ["12:00","12:05","12:10", ...],
      *     "temperature":      [22.5, 23.0, 22.8, ...],
      *     "soilMoisture":     [45.0, 46.2, 44.8, ...],
-     *     "soilConductivity": [1.20, 1.31, 1.18, ...],
-     *      "battery":          [85.0, 84.2, 83.8, ...]
+     *     "soilConductivity": [1.20, 1.31, 1.18, ...]
+     *     "battery":          [85.0, 84.2, 83.8, ...]
      *   },
      *   "2": { ... }
      * }
