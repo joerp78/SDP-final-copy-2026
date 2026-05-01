@@ -161,7 +161,7 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
         print(f"[WARN] EPC {epc}: user memory too short ({len(raw)} bytes, need 8).")
         return None
 
-    temp_raw, phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
+    temp_raw, _phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
 
     plant_id = EPC_PLANT_MAP.get(epc)
     if plant_id is None:
@@ -169,18 +169,18 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
         return None
 
     # Temperature is still passed through with the legacy raw*0.01 scaling used
-    # elsewhere in the hub path. Phase and conductivity now come from packed
-    # firmware words, while battery is raw mV. All three are converted into
-    # percentages by the helpers above.
-    conductivity_pct = compute_conductivity(cond_raw)
-    moisture_pct = compute_moisture(phase_raw)
+    # elsewhere in the hub path. The old conductivity/amplitude word is now
+    # temporarily repurposed as the moisture metric, while the old phase word is
+    # ignored. Conductivity is temporarily reported as a simple status string.
+    conductivity_status = "Good"
+    moisture_pct = compute_conductivity(cond_raw)
     battery_pct = compute_battery(batt_raw)
 
     return plant_id, {
         "plantId":          plant_id,
         "name":             "",          # managed server-side via POST /api/plants
         "temperature":      round(temp_raw  * 0.01, 2),
-        "soilConductivity": conductivity_pct,
+        "soilConductivity": conductivity_status,
         "soilMoisture":     moisture_pct,
         "battery":          battery_pct,
         "timestamp":        ts.replace(tzinfo=None).isoformat(timespec="milliseconds"),
@@ -308,7 +308,7 @@ def send_rfid_events(
         plant_readings.setdefault(plant_id, []).append(payload)
         print(f"[INFO] EPC {epc} -> plant {plant_id} | "
               f"temp={payload['temperature']} C  "
-              f"conductivity={payload['soilConductivity']} %  "
+              f"conductivity={payload['soilConductivity']}  "
               f"moisture={payload['soilMoisture']} %  "
               f"battery={payload['battery']} %")
 

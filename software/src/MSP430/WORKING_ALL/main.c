@@ -73,7 +73,9 @@
  *     0 -> P2.4 high (high sensitivity path)
  *     1 -> P2.4 low  (reduced gain / anti-rail path)
  *   Bits [11:0] = raw conductivity amplitude
- *     (I/Q-derived amplitude, scaled to ADC-count-like peak-to-peak units).
+ *     Normally I/Q-derived amplitude, scaled to ADC-count-like peak-to-peak
+ *     units. If a high-gain capture forced P2.4 low, this reports the
+ *     latched high-gain raw peak-to-peak that caused the switch.
  *
  * Server-side decode:
  *   temperature_c = word0 / 100.0
@@ -108,6 +110,9 @@ volatile uint16_t adc_capture_mean_raw    = 0;
 volatile uint16_t adc_capture_mean_mV     = 0;
 volatile uint16_t adc_capture_avgdev_raw  = 0;
 volatile uint16_t adc_capture_avgdev_mV   = 0;
+volatile uint16_t adc_capture_min_mV      = 0;
+volatile uint16_t adc_capture_max_mV      = 0;
+volatile uint16_t adc_capture_pkpk_mV     = 0;
 volatile uint16_t adc_phase_pkpk_raw      = 0;
 volatile uint16_t moisture_signal_raw     = 0;
 volatile uint16_t moisture_signal_mV      = 0;
@@ -126,6 +131,7 @@ volatile uint16_t conductivity_tag_word    = 0;
 volatile uint16_t battery_tag_word         = 0;
 volatile uint8_t  em4325_cond_write_status = 0;
 volatile uint8_t  em4325_batt_write_status = 0;
+volatile uint8_t  em4325_reboot_status = 0;
 volatile uint16_t em4325_temp_readback_word = 0;
 volatile uint16_t em4325_phase_readback_word = 0;
 volatile uint16_t em4325_cond_readback_word = 0;
@@ -144,6 +150,18 @@ volatile uint16_t feedback_last_max_raw    = 0;
 volatile uint16_t feedback_last_pkpk_raw   = 0;
 volatile uint16_t feedback_last_mean_raw   = 0;
 volatile uint16_t feedback_last_amplitude_raw = 0;
+volatile uint8_t  feedback_trip_latched    = 0;
+volatile uint8_t  feedback_trip_reason_flags = 0;
+volatile uint16_t feedback_trip_min_raw    = 0;
+volatile uint16_t feedback_trip_max_raw    = 0;
+volatile uint16_t feedback_trip_pkpk_raw   = 0;
+volatile uint16_t feedback_trip_mean_raw   = 0;
+volatile uint16_t feedback_trip_amplitude_raw = 0;
+volatile uint16_t feedback_trip_min_mV     = 0;
+volatile uint16_t feedback_trip_max_mV     = 0;
+volatile uint16_t feedback_trip_pkpk_mV    = 0;
+volatile uint16_t reported_signal_raw      = 0;
+volatile uint16_t reported_signal_mV       = 0;
 volatile uint16_t feedback_dynamic_threshold_raw = 0;
 volatile uint16_t feedback_dynamic_headroom_raw  = 0;
 volatile uint16_t measured_vdd_raw_ref          = 0;
@@ -179,6 +197,10 @@ volatile uint16_t adc_timeout_channel = 0;
 volatile uint8_t  iq_debug_stage = 0;
 volatile uint32_t timer1_isr_count = 0;
 volatile uint32_t timer1_adc_timeout_seen = 0;
+volatile uint32_t adc_capture_isr_count = 0;
+volatile uint32_t adc_capture_missed_triggers = 0;
+volatile uint8_t  adc_capture_pending = 0;
+volatile uint8_t  adc_capture_pending_phase = 0;
 volatile uint16_t iq_wait_last_index = 0;
 volatile uint16_t iq_wait_last_tb1r = 0;
 volatile uint16_t iq_wait_sr = 0;
@@ -280,17 +302,21 @@ void main(void)
     __delay_cycles(BQ35100_WAKE_CYCLES);
     init_i2c_bq35100();
     EM4325_SPI_Init();
+    em4325_reboot_status = EM4325_Reboot();
+    __delay_cycles(MEASUREMENT_SETTLE_CYCLES);
+    configure_EM4325_AUX_RFEvent();
+    init_RFID_AUX_Wakeup();
     __bis_SR_register(GIE);     // enable global interrupts
 
     while (1)
     {
-        /* Local debug mode:
-         * run measurement/write cycles continuously without waiting for
-         * the EM4325 AUX interrupt from the reader. */
+        if (!rfid_write_triggered)
+            enter_low_power_until_rfid();
+
+        rfid_write_triggered = 0U;
         run_measurement_cycle();
         write_tag_payload();
         measurement_cycle_count++;
-        __delay_cycles(MEASUREMENT_SETTLE_CYCLES);
     }
 }
 
@@ -394,6 +420,8 @@ void stop_measurement_timers(void)
     TB0CTL    = TBSSEL__SMCLK | MC__STOP | TBCLR;
     TB1CCTL0 &= ~CCIE;
     TB1CTL    = TBSSEL__SMCLK | MC__STOP | TBCLR;
+    ADCIE    &= ~ADCIE0;
+    adc_capture_pending = 0U;
 }
 
 void iq_frontend_off(void)
@@ -442,6 +470,9 @@ uint8_t wait_for_iq_capture(void)
         iq_debug_stage = 3U;
         measurement_timeout_count++;
         TB1CCTL0 &= ~CCIE;
+        ADCIE &= ~ADCIE0;
+        ADCCTL0 &= ~ADCENC;
+        adc_capture_pending = 0U;
         return 0U;
     }
 
@@ -477,7 +508,12 @@ uint8_t run_iq_capture_with_feedback(void)
         iq_debug_stage = 7U;
         measured_vdd_mv = measure_vdd_mv();
         if (measured_vdd_mv != 0U)
+        {
             moisture_signal_mV = (uint16_t)(((uint32_t)moisture_signal_raw * measured_vdd_mv) / 4095U);
+            adc_capture_min_mV = (uint16_t)(((uint32_t)adc_capture_min_raw * measured_vdd_mv) / 4095U);
+            adc_capture_max_mV = (uint16_t)(((uint32_t)adc_capture_max_raw * measured_vdd_mv) / 4095U);
+            adc_capture_pkpk_mV = (uint16_t)(((uint32_t)adc_capture_pkpk_raw * measured_vdd_mv) / 4095U);
+        }
 
         feedback_dynamic_headroom_raw =
             (uint16_t)(2U * ((adc_capture_mean_raw < (4095U - adc_capture_mean_raw)) ?
@@ -499,6 +535,16 @@ uint8_t run_iq_capture_with_feedback(void)
                     feedback_low_reason_flags |= BIT1;
                 if (feedback_near_vdd_hit)
                     feedback_low_reason_flags |= BIT2;
+                feedback_trip_latched = 1U;
+                feedback_trip_reason_flags = feedback_low_reason_flags;
+                feedback_trip_min_raw = adc_capture_min_raw;
+                feedback_trip_max_raw = adc_capture_max_raw;
+                feedback_trip_pkpk_raw = adc_capture_pkpk_raw;
+                feedback_trip_mean_raw = adc_capture_mean_raw;
+                feedback_trip_amplitude_raw = moisture_signal_raw;
+                feedback_trip_min_mV = adc_capture_min_mV;
+                feedback_trip_max_mV = adc_capture_max_mV;
+                feedback_trip_pkpk_mV = adc_capture_pkpk_mV;
                 set_feedback_low();
                 __delay_cycles(MEASUREMENT_SETTLE_CYCLES);
                 continue;
@@ -561,6 +607,10 @@ void run_measurement_cycle(void)
     measurement_debug_stage = 3U;
     iq_frontend_on();
     iq_avg_valid_count = 0U;
+    feedback_trip_latched = 0U;
+    feedback_trip_reason_flags = 0U;
+    reported_signal_raw = 0U;
+    reported_signal_mV = 0U;
     for (i = 0U; i < IQ_AVG_CAPTURES; i++)
     {
         measurement_debug_stage = (uint8_t)(4U + i);
@@ -583,6 +633,18 @@ void run_measurement_cycle(void)
         if (measured_vdd_mv != 0U)
             moisture_signal_mV = (uint16_t)(((uint32_t)moisture_signal_raw * measured_vdd_mv) / 4095U);
     }
+
+    if (feedback_trip_latched)
+    {
+        reported_signal_raw = feedback_trip_pkpk_raw;
+        reported_signal_mV = feedback_trip_pkpk_mV;
+    }
+    else
+    {
+        reported_signal_raw = moisture_signal_raw;
+        reported_signal_mV = moisture_signal_mV;
+    }
+
     if (phase_valid_count != 0U)
     {
         phase_delay_signed_deg_x10 = (int16_t)(phase_sum / phase_valid_count);
@@ -877,7 +939,8 @@ uint8_t bq_read_u16(uint8_t reg, uint16_t *value)
 void init_ADC(void)
 {
     ADCCTL0 &= ~ADCENC;
-    ADCCTL0  = ADCSHT_0 | ADCON;        // short S&H keeps ADC phase tagging coherent
+    ADCIE   &= ~ADCIE0;
+    ADCCTL0  = ADCSHT_0 | ADCON;        // short S&H keeps DAC ISR timing intact
     ADCCTL1  = ADCSHP;                   // sample timer mode
     ADCCTL2  = ADCRES_2;                 // 12-bit resolution
     ADCMCTL0 = ADCINCH_1 | ADCSREF_0;   // channel A1 (P1.1), ref = AVCC/AVSS
@@ -886,6 +949,7 @@ void init_ADC(void)
 void init_Thermistor_ADC(void)
 {
     ADCCTL0 &= ~ADCENC;
+    ADCIE   &= ~ADCIE0;
     ADCCTL0  = ADCSHT_2 | ADCON;        // longer S&H for high-impedance thermistor divider
     ADCCTL1  = ADCSHP;                  // sample timer mode
     ADCCTL2  = ADCRES_2;                // 12-bit resolution
@@ -897,6 +961,7 @@ uint16_t read_thermistor_ADC(void)
     uint32_t timeout = ADC_CONVERSION_TIMEOUT_LOOPS;
 
     ADCCTL0 &= ~ADCENC;
+    ADCIE   &= ~ADCIE0;
     ADCMCTL0 = ADCINCH_0 | ADCSREF_0;
     ADCIFG  &= ~ADCIFG0;
     ADCCTL0 |= ADCENC | ADCSC;
@@ -921,6 +986,7 @@ uint16_t read_ADC_channel(uint16_t input_channel)
     uint32_t timeout = ADC_CONVERSION_TIMEOUT_LOOPS;
 
     ADCCTL0 &= ~ADCENC;
+    ADCIE   &= ~ADCIE0;
     ADCMCTL0 = input_channel | ADCSREF_0;
     ADCIFG  &= ~ADCIFG0;
     ADCCTL0 |= ADCENC | ADCSC;          // enable + start conversion
@@ -1010,6 +1076,9 @@ void process_ADC_Capture(void)
 
     adc_capture_mean_raw = (uint16_t)(sum / ADC_CAPTURE_SAMPLES);
     adc_capture_mean_mV  = (uint16_t)(((uint32_t)adc_capture_mean_raw * 3000U) / 4095U);
+    adc_capture_min_mV   = (uint16_t)(((uint32_t)adc_capture_min_raw * 3000U) / 4095U);
+    adc_capture_max_mV   = (uint16_t)(((uint32_t)adc_capture_max_raw * 3000U) / 4095U);
+    adc_capture_pkpk_mV  = (uint16_t)(((uint32_t)adc_capture_pkpk_raw * 3000U) / 4095U);
 
     for (i = 0; i < ADC_CAPTURE_SAMPLES; i++)
     {
@@ -1093,10 +1162,13 @@ void process_ADC_Capture(void)
     phase_delay_signed_deg_x10    = phase_angle_deg_x10;
     phase_delay_us_x100           = (int16_t)((signed_steps_x100 * 625L) / 100L);
     phase_delay_ns                = (signed_steps_x100 * 6250L) / 100L;
-    phase_delay_valid             = (amplitude_pkpk_raw >= PHASE_VALID_MIN_PKPK_RAW) ? 1U : 0U;
+    phase_delay_valid             = (adc_capture_pkpk_raw >= PHASE_VALID_MIN_PKPK_RAW) ? 1U : 0U;
     phase_correlation_score       = vector_magnitude;
 
-    moisture_signal_raw = (uint16_t)amplitude_pkpk_raw;
+    /* Conductivity is an amplitude measurement. The raw timed capture
+     * min/max is the value that also drives feedback, so use it for export
+     * instead of the phase-binned I/Q fundamental while bring-up is active. */
+    moisture_signal_raw = adc_capture_pkpk_raw;
     moisture_signal_mV  = (uint16_t)(((uint32_t)moisture_signal_raw * 3000U) / 4095U);
     moisture_capture_count++;
     feedback_last_mean_raw = adc_capture_mean_raw;
@@ -1109,6 +1181,18 @@ void reset_ADC_Capture(void)
     adc_capture_max_raw  = 0;
     adc_capture_pkpk_raw = 0;
     adc_capture_done     = 0;
+    adc_capture_pending  = 0;
+
+    /* The previous ADC use may have been the thermistor or internal VREF.
+     * Throw away one A1 conversion so the sample capacitor starts from the
+     * I/Q node before timed waveform capture begins. */
+    (void)read_ADC_channel(ADCINCH_1);
+
+    ADCCTL0 &= ~ADCENC;
+    ADCMCTL0 = ADCINCH_1 | ADCSREF_0;
+    ADCIFG  &= ~ADCIFG0;
+    ADCIE   |= ADCIE0;
+    ADCCTL0 |= ADCENC;
 
     TB1CTL   = TBSSEL__SMCLK | MC__STOP | TBCLR;
     TB1CCTL0 = 0U;
@@ -1207,7 +1291,7 @@ void update_raw_export_words(void)
 
     temperature_tag_word = temperature_C_x100;
     battery_tag_word = batt_voltage_mV;
-    conductivity_tag_word = moisture_signal_raw & 0x0FFFU;
+    conductivity_tag_word = reported_signal_raw & 0x0FFFU;
     if (feedback_low_enabled)
         conductivity_tag_word |= 0x8000U;
 
@@ -1253,10 +1337,6 @@ __interrupt void TIMER0_B0_ISR(void)
 #pragma vector = TIMER1_B0_VECTOR
 __interrupt void TIMER1_B0_ISR(void)
 {
-    uint16_t sample;
-    uint8_t  phase_tag;
-    uint32_t adc_timeout_before;
-
     timer1_isr_count++;
 
     if (adc_capture_done)
@@ -1265,28 +1345,56 @@ __interrupt void TIMER1_B0_ISR(void)
         return;
     }
 
-    phase_tag = sine_index;
-    adc_timeout_before = adc_timeout_count;
-    sample = read_ADC_channel(ADCINCH_1);
-    if (adc_timeout_count != adc_timeout_before)
-        timer1_adc_timeout_seen++;
-    adc_probe_raw = sample;
-    adc_probe_mV  = (uint16_t)(((uint32_t)sample * 3000U) / 4095U);
-    adc_probe_count++;
-
-    adc_capture_buffer[adc_capture_index] = sample;
-    adc_capture_phase_idx[adc_capture_index] = phase_tag;
-    if (sample < adc_capture_min_raw)
-        adc_capture_min_raw = sample;
-    if (sample > adc_capture_max_raw)
-        adc_capture_max_raw = sample;
-
-    adc_capture_index++;
-    if (adc_capture_index >= ADC_CAPTURE_SAMPLES)
+    if ((ADCCTL1 & ADCBUSY) || adc_capture_pending)
     {
-        adc_capture_pkpk_raw = adc_capture_max_raw - adc_capture_min_raw;
-        adc_capture_done = 1;
-        TB1CCTL0 &= ~CCIE;
+        adc_capture_missed_triggers++;
+        return;
+    }
+
+    adc_capture_pending_phase = sine_index;
+    adc_capture_pending = 1U;
+    ADCCTL0 |= ADCSC;
+}
+
+#pragma vector = ADC_VECTOR
+__interrupt void ADC_ISR(void)
+{
+    uint16_t sample;
+
+    switch (__even_in_range(ADCIV, ADCIV__ADCIFG0))
+    {
+    case ADCIV__ADCIFG0:
+        if (!adc_capture_pending || adc_capture_done)
+            break;
+
+        sample = ADCMEM0;
+        adc_capture_pending = 0U;
+        adc_capture_isr_count++;
+
+        adc_probe_raw = sample;
+        adc_probe_mV  = (uint16_t)(((uint32_t)sample * 3000U) / 4095U);
+        adc_probe_count++;
+
+        adc_capture_buffer[adc_capture_index] = sample;
+        adc_capture_phase_idx[adc_capture_index] = adc_capture_pending_phase;
+        if (sample < adc_capture_min_raw)
+            adc_capture_min_raw = sample;
+        if (sample > adc_capture_max_raw)
+            adc_capture_max_raw = sample;
+
+        adc_capture_index++;
+        if (adc_capture_index >= ADC_CAPTURE_SAMPLES)
+        {
+            adc_capture_pkpk_raw = adc_capture_max_raw - adc_capture_min_raw;
+            adc_capture_done = 1U;
+            TB1CCTL0 &= ~CCIE;
+            ADCIE &= ~ADCIE0;
+            ADCCTL0 &= ~ADCENC;
+        }
+        break;
+
+    default:
+        break;
     }
 }
 
