@@ -27,6 +27,14 @@
 #define MEASUREMENT_SETTLE_CYCLES (80000U)
 #define THERMISTOR_AVG_SAMPLES    (8U)
 #define IQ_AVG_CAPTURES           (4U)
+#define RC_MOISTURE_AVG_SAMPLES   (16U)
+#define RC_MOISTURE_TIMEOUT_COUNT (65000U)
+#define RC_DISCHARGE_CYCLES       (160000U)
+#define RC_STEP_DELAY_CYCLES      (10U)
+#define MOISTURE_DRY_RAW          (110U)
+#define MOISTURE_WET_RAW          (180U)
+#define TAG_WRITE_PRE_DELAY_CYCLES  (800000UL)
+#define TAG_WRITE_POST_DELAY_CYCLES (1600000UL)
 #define IQ_CAPTURE_TIMEOUT_LOOPS  (1000000UL)
 #define ADC_CONVERSION_TIMEOUT_LOOPS (50000UL)
 #define CONDUCTIVITY_AIR_RAW     (51U)
@@ -60,31 +68,19 @@
  *   Example: 23.4 C -> 2340 -> 0x0924.
  *
  * USER word 1:
- *   Raw phase packet.
- *   Bit 15 = phase-valid flag:
- *     1 -> phase valid
- *     0 -> phase invalid / not enough signal
- *   Bits [11:0] = signed phase delay in deg_x10, two's complement.
- *     Example: 123 = +12.3 deg, 0xFF85 = -12.3 deg in 12-bit two's complement.
+ *   Phase packet. RC moisture mode does not measure phase, so this is
+ *   normally invalid/zero.
  *
  * USER word 2:
- *   Raw conductivity amplitude packet.
- *   Bit 15 = feedback state during export:
- *     0 -> P2.4 high (high sensitivity path)
- *     1 -> P2.4 low  (reduced gain / anti-rail path)
- *   Bits [11:0] = raw conductivity amplitude
- *     Normally I/Q-derived amplitude, scaled to ADC-count-like peak-to-peak
- *     units. If a high-gain capture forced P2.4 low, this reports the
- *     latched high-gain raw peak-to-peak that caused the switch.
+ *   RC moisture/conductivity metric.
+ *   Bits [11:0] = averaged Charge_Read RC timing count, clamped to 12 bits.
+ *   Upper bits are kept clear.
  *
  * Server-side decode:
  *   temperature_c = word0 / 100.0
- *   phase_valid = (word1 & 0x8000) != 0
- *   phase_raw_12 = word1 & 0x0FFF
- *   if (phase_raw_12 & 0x0800) phase_raw_12 -= 0x1000
- *   phase_deg = phase_raw_12 / 10.0
- *   feedback_low = (word2 & 0x8000) != 0
- *   conductivity_raw = word2 & 0x0FFF
+ *   rc_count = word2 & 0x0FFF
+ *   moisture_pct ~= clamp((rc_count - dry_count) * 100 /
+ *                         (wet_count - dry_count), 0, 100)
  *
  * USER word 3:
  *   Raw BQ35100 battery voltage in mV.
@@ -117,6 +113,9 @@ volatile uint16_t adc_phase_pkpk_raw      = 0;
 volatile uint16_t moisture_signal_raw     = 0;
 volatile uint16_t moisture_signal_mV      = 0;
 volatile uint32_t moisture_capture_count  = 0;
+volatile uint16_t moisture_rc_raw         = 0;
+volatile uint16_t moisture_percent        = 0;
+volatile uint8_t  moisture_rc_timeout     = 0;
 volatile uint32_t temperature_update_count = 0;
 volatile uint8_t  em4325_temp_write_status = 0;
 volatile uint8_t  em4325_phase_write_status = 0;
@@ -238,6 +237,8 @@ void     sensors_power_on(void);
 void     sensors_power_off(void);
 void     thermistor_input_on(void);
 void     thermistor_input_off(void);
+uint16_t read_moisture_rc_raw(void);
+uint16_t moisture_raw_to_percent(uint16_t raw);
 void     iq_frontend_on(void);
 void     iq_frontend_off(void);
 void     stop_measurement_timers(void);
@@ -310,7 +311,7 @@ void main(void)
 
     while (1)
     {
-        if (!rfid_write_triggered)
+        if (!rfid_write_triggered && !(P2IN & BIT1))
             enter_low_power_until_rfid();
 
         rfid_write_triggered = 0U;
@@ -361,6 +362,12 @@ void init_RFID_AUX_Wakeup(void)
 
 void enter_low_power_until_rfid(void)
 {
+    if (P2IN & BIT1)
+    {
+        rfid_write_triggered = 1U;
+        return;
+    }
+
     P2IFG &= ~BIT1;
     P2IE  |=  BIT1;
     __bis_SR_register(LPM4_bits | GIE);
@@ -392,6 +399,56 @@ void thermistor_input_off(void)
     P1SEL1 &= ~BIT0;
     P1DIR  |=  BIT0;
     P1OUT  &= ~BIT0;
+}
+
+uint16_t read_moisture_rc_raw(void)
+{
+    uint16_t count;
+
+    P5OUT |= BIT3;                 // MUX_EN = 1
+    P5OUT &= ~(BIT1 | BIT0);       // A1=0, A0=0 -> S1 path
+    __delay_cycles(1000U);
+
+    P6SEL0 &= ~BIT0;
+    P6SEL1 &= ~BIT0;
+    P6REN  &= ~BIT0;
+
+    P6DIR |= BIT0;
+    P6OUT &= ~BIT0;
+    __delay_cycles(RC_DISCHARGE_CYCLES);
+
+    P6DIR &= ~BIT0;
+    count = 0U;
+    while (((P6IN & BIT0) == 0U) && (count < RC_MOISTURE_TIMEOUT_COUNT))
+    {
+        count++;
+        __delay_cycles(RC_STEP_DELAY_CYCLES);
+    }
+
+    moisture_rc_timeout = (count >= RC_MOISTURE_TIMEOUT_COUNT) ? 1U : 0U;
+
+    P6DIR |= BIT0;
+    P6OUT &= ~BIT0;
+    P5OUT &= ~(BIT3 | BIT1 | BIT0);
+
+    moisture_capture_count++;
+    return count;
+}
+
+uint16_t moisture_raw_to_percent(uint16_t raw)
+{
+    uint32_t percent;
+
+    if (raw <= MOISTURE_DRY_RAW)
+        return 0U;
+
+    if (raw >= MOISTURE_WET_RAW)
+        return 100U;
+
+    percent = ((uint32_t)(raw - MOISTURE_DRY_RAW) * 100U) /
+              (uint32_t)(MOISTURE_WET_RAW - MOISTURE_DRY_RAW);
+
+    return (uint16_t)percent;
 }
 
 void iq_frontend_on(void)
@@ -586,8 +643,6 @@ void run_measurement_cycle(void)
     uint8_t i;
     uint32_t temp_sum = 0U;
     uint32_t moisture_sum = 0U;
-    int32_t phase_sum = 0L;
-    uint8_t phase_valid_count = 0U;
 
     measurement_debug_stage = 1U;
     sensors_power_on();
@@ -605,56 +660,23 @@ void run_measurement_cycle(void)
     batt_i2c_error = read_battery_voltage_mv((uint16_t *)&batt_voltage_mV);
 
     measurement_debug_stage = 3U;
-    iq_frontend_on();
-    iq_avg_valid_count = 0U;
-    feedback_trip_latched = 0U;
-    feedback_trip_reason_flags = 0U;
-    reported_signal_raw = 0U;
-    reported_signal_mV = 0U;
-    for (i = 0U; i < IQ_AVG_CAPTURES; i++)
+    moisture_sum = 0U;
+    for (i = 0U; i < RC_MOISTURE_AVG_SAMPLES; i++)
     {
         measurement_debug_stage = (uint8_t)(4U + i);
-        if (run_iq_capture_with_feedback())
-        {
-            moisture_sum += moisture_signal_raw;
-            if (phase_delay_valid)
-            {
-                phase_sum += phase_delay_signed_deg_x10;
-                phase_valid_count++;
-            }
-            iq_avg_valid_count++;
-        }
+        moisture_sum += read_moisture_rc_raw();
+        __delay_cycles(1000U);
     }
 
     measurement_debug_stage = 8U;
-    if (iq_avg_valid_count != 0U)
-    {
-        moisture_signal_raw = (uint16_t)(moisture_sum / iq_avg_valid_count);
-        if (measured_vdd_mv != 0U)
-            moisture_signal_mV = (uint16_t)(((uint32_t)moisture_signal_raw * measured_vdd_mv) / 4095U);
-    }
-
-    if (feedback_trip_latched)
-    {
-        reported_signal_raw = feedback_trip_pkpk_raw;
-        reported_signal_mV = feedback_trip_pkpk_mV;
-    }
-    else
-    {
-        reported_signal_raw = moisture_signal_raw;
-        reported_signal_mV = moisture_signal_mV;
-    }
-
-    if (phase_valid_count != 0U)
-    {
-        phase_delay_signed_deg_x10 = (int16_t)(phase_sum / phase_valid_count);
-        phase_delay_valid = 1U;
-    }
-    else
-    {
-        phase_delay_signed_deg_x10 = 0;
-        phase_delay_valid = 0U;
-    }
+    moisture_rc_raw = (uint16_t)(moisture_sum / RC_MOISTURE_AVG_SAMPLES);
+    moisture_signal_raw = moisture_rc_raw;
+    moisture_percent = moisture_raw_to_percent(moisture_signal_raw);
+    reported_signal_raw = moisture_signal_raw & 0x0FFFU;
+    reported_signal_mV = 0U;
+    moisture_signal_mV = 0U;
+    phase_delay_signed_deg_x10 = 0;
+    phase_delay_valid = 0U;
 
     measurement_debug_stage = 9U;
     update_raw_export_words();
@@ -677,13 +699,12 @@ void write_tag_payload(void)
     page_words[2] = conductivity_tag_word;
     page_words[3] = battery_tag_word;
 
-    /* Let the analog front end and sensor rail fully settle off before
-     * asking the tag IC to commit EEPROM. This gives the EM4325 the
-     * quietest supply conditions we can provide in local debug mode. */
-    __delay_cycles(MEASUREMENT_SETTLE_CYCLES / 4U);
+    /* Running without breakpoints removes the accidental pause that gave the
+     * EM4325 and external reader time to settle. Make that pause explicit. */
+    __delay_cycles(TAG_WRITE_PRE_DELAY_CYCLES);
 
     (void)EM4325_SetTransponderEnabled(0U);
-    __delay_cycles(800U);
+    __delay_cycles(MEASUREMENT_SETTLE_CYCLES / 4U);
 
     page_write_status = EM4325_WritePage(EM4325_USER_PAGE0_NUM, page_words);
     em4325_temp_write_status = page_write_status;
@@ -703,6 +724,7 @@ void write_tag_payload(void)
     em4325_batt_readback_word  = page_readback[3];
 
     (void)EM4325_SetTransponderEnabled(1U);
+    __delay_cycles(TAG_WRITE_POST_DELAY_CYCLES);
 
     temperature_update_count++;
 }
@@ -799,6 +821,13 @@ void init_GPIO(void)
     P5SEL1 &= ~(BIT3 | BIT1 | BIT0);
     P5DIR  |=  (BIT3 | BIT1 | BIT0);
     P5OUT  &= ~(BIT3 | BIT1 | BIT0);
+
+    // P6.0 - Charge_Read RC moisture pin. Hold low while idle.
+    P6SEL0 &= ~BIT0;
+    P6SEL1 &= ~BIT0;
+    P6DIR  |=  BIT0;
+    P6OUT  &= ~BIT0;
+    P6REN  &= ~BIT0;
 }
 
 
@@ -1292,8 +1321,6 @@ void update_raw_export_words(void)
     temperature_tag_word = temperature_C_x100;
     battery_tag_word = batt_voltage_mV;
     conductivity_tag_word = reported_signal_raw & 0x0FFFU;
-    if (feedback_low_enabled)
-        conductivity_tag_word |= 0x8000U;
 
     if (phase_clamped > 2047)
         phase_clamped = 2047;
