@@ -25,7 +25,6 @@
             --border: #d8e4dd;
             --temp: #e07a5f;
             --moisture: #457b9d;
-            --conductivity: #e9c46a;
             --light-color: #f4a261;
             --humidity-color: #2a9d8f;
             --healthy: #40916c;
@@ -285,7 +284,6 @@
         .metric-icon svg { width: 16px; height: 16px; }
         .metric-icon.temp         { background: #fce8e2; color: var(--temp); }
         .metric-icon.moisture     { background: #dfeef7; color: var(--moisture); }
-        .metric-icon.conductivity { background: #fdf5e0; color: var(--conductivity); }
         .metric-icon.battery      { background: #d8f3dc; color: #40916c; }
         .metric-label {
             font-size: 0.8rem;
@@ -563,19 +561,6 @@
                                         ? #numbers.formatDecimal(plant.soilMoisture,1,1) + ' %'
                                         : '—'}">45.0 %</span>
                     </div>
-                    <!-- Soil Conductivity -->
-                    <div class="metric-row">
-                        <div class="metric-icon conductivity">
-                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                            </svg>
-                        </div>
-                        <span class="metric-label">Conductivity</span>
-                        <span class="metric-value"
-                              th:text="${plant.soilConductivity != null
-                    ? #numbers.formatDecimal(plant.soilConductivity,1,2) + ' %'
-                    : '—'}">1.20 %</span>
-                    </div>
                     <!-- Battery -->
                     <div class="metric-row">
                         <div class="metric-icon battery">
@@ -667,12 +652,6 @@
                         <canvas th:id="'batteryChart-' + ${plant.plantId}"></canvas>
                     </div>
                 </div>
-                <div class="chart-card">
-                    <h4><span class="dot" style="background:var(--conductivity)"></span> Conductivity</h4>
-                    <div class="chart-wrap">
-                        <canvas th:id="'conductivityChart-' + ${plant.plantId}"></canvas>
-                    </div>
-                </div>
             </div>
         </div>
     </section>
@@ -690,7 +669,6 @@
      *     "labels":           ["12:00","12:05","12:10", ...],
      *     "temperature":      [22.5, 23.0, 22.8, ...],
      *     "soilMoisture":     [45.0, 46.2, 44.8, ...],
-     *     "soilConductivity": [1.20, 1.31, 1.18, ...]
      *     "battery":          [85.0, 84.2, 83.8, ...]
      *   },
      *   "2": { ... }
@@ -814,8 +792,6 @@
                        '#e07a5f', 'Temperature',  '°C');
             buildChart('moistureChart-'     + pid, d.labels, d.soilMoisture,
                        '#457b9d', 'Soil Moisture', '%');
-            buildChart('conductivityChart-' + pid, d.labels, d.soilConductivity,
-                       '#e9c46a', 'Conductivity',  '%');
             buildChart('batteryChart-'      + pid, d.labels, d.battery,
                         '#74c69d', 'Battery', '%');
         });
