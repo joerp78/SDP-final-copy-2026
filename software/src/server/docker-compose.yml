@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      - TZ=America/New_York
     ports:
       - "8081:8081"
     env_file:
