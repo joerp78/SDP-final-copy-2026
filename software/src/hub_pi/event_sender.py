@@ -85,32 +85,39 @@ def compute_conductivity(cond_word: int) -> float:
     percent = (amplitude_mv - 10.0) * 64.0 / (2500.0 - 10.0)
     return round(percent, 1)
 
-
 def compute_moisture(moisture_word: int) -> float:
     """
-    Decode the packed RC moisture word and convert it to a moisture percent.
+    Decode RC moisture and convert to percent with a nonlinear curve.
 
     Tag encoding:
-      - bits 11:0: average RC count divided by 16
+      - USER word 2 is the averaged RC timing count.
+      - Higher count = more moisture.
 
-    Conversion rules:
-      - raw value 0   -> 0.0%
-      - raw value 200 -> 100.0%
-      - values outside that range are clamped
+    Calibration:
+      - dry_raw -> 0%
+      - mid_raw -> 35%
+      - wet_raw -> 100%
 
-    Returns:
-        Moisture percentage rounded to 1 decimal place.
+    The upper half is intentionally less sensitive than the lower half.
     """
     rc_raw = moisture_word & 0x0FFF
 
-    if rc_raw <= 0:
+    dry_raw = 10
+    mid_raw = 100
+    wet_raw = 210
+
+    if rc_raw <= dry_raw:
         return 0.0
-    if rc_raw >= 200:
+    if rc_raw >= wet_raw:
         return 100.0
 
-    percent = rc_raw * 100.0 / 200.0
-    return round(percent, 1)
+    if rc_raw <= mid_raw:
+        percent = 35.0 * (rc_raw - dry_raw) / (mid_raw - dry_raw)
+    else:
+        x = (rc_raw - mid_raw) / (wet_raw - mid_raw)
+        percent = 35.0 + 65.0 * (1.0 - (1.0 - x) ** 2.0)
 
+    return round(percent, 1)
 
 def compute_battery(batt_word: int) -> float:
     """
@@ -153,22 +160,25 @@ def decode_plant(user_hex: str, epc: str, ts: datetime) -> Optional[Tuple[int, d
 
     temp_raw, phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
 
-    plant_id = EPC_PLANT_MAP.get(epc)
-    if plant_id is None:
+    plant_info = EPC_PLANT_MAP.get(epc)
+    if plant_info is None:
         print(f"[WARN] EPC {epc}: not found in EPC_PLANT_MAP - skipped.")
         return None
+
+    plant_id   = plant_info["id"]
+    plant_name = plant_info["name"]
 
     # Temperature is still passed through with the legacy raw*0.01 scaling used
     # elsewhere in the hub path. Phase and conductivity now come from packed
     # firmware words, while battery is raw mV. All three are converted into
     # percentages by the helpers above.
     conductivity_pct = compute_conductivity(cond_raw)
-    moisture_pct = compute_moisture(phase_raw)
+    moisture_pct = compute_moisture(cond_raw)
     battery_pct = compute_battery(batt_raw)
 
     return plant_id, {
         "plantId":          plant_id,
-        "name":             "",          # managed server-side via POST /api/plants
+        "name":             plant_name,          
         "temperature":      round(temp_raw  * 0.01, 2),
         "soilConductivity": conductivity_pct,
         "soilMoisture":     moisture_pct,

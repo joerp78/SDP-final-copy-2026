@@ -42,7 +42,8 @@ ALLOWED_TAGS = {
     "0080B0443C000000129DA5BE"#GEN 2 Board
 }
 
-EPC_PLANT_MAP: dict[str, int] = {
-    "0080B0443C000000129D9CAA": 1,
-    # "0080B0443C000000129D9CBB": 2,   # add more tags here
+EPC_PLANT_MAP: dict[str, dict] = {
+    "0080B0443C000000129D9CAA": {"id": 1, "name": "Palm Tree"},
+    "0080B0443C000000129DA5BE": {"id": 2, "name": "Basil"},
+    "0080B0443C000000129DA3B8": {"id": 3, "name": "Tomato"},
 }

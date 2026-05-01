@@ -164,7 +164,7 @@ def main() -> None:
                                     temp_raw, phase_raw, cond_raw, batt_raw = struct.unpack(">HHHH", raw[:8])
 
                                     temperature = round(temp_raw * 0.01, 2)
-                                    moisture    = compute_moisture(phase_raw)
+                                    moisture    = compute_moisture(cond_raw)
                                     conductivity = compute_conductivity(cond_raw)
                                     battery     = batt_raw
 
