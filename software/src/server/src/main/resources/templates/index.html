@@ -862,28 +862,28 @@
         /* Hub charts */
         if (hubData && hubData.labels) {
             buildChart('hubLightChart',    hubData.labels, hubData.lux,
-                        '#f4a261', 'Light', 'lux');
+                       '#f4a261', 'Light', 'lux');
             buildChart('hubHumidityChart', hubData.labels, hubData.humidity,
                        '#2a9d8f', 'Humidity', '%');
+
+            if (hubData.dominantChannel) {
+                const wavelengthSeries = hubData.dominantChannel.map(function(ch) {
+                    return CHANNEL_NM[ch] != null ? CHANNEL_NM[ch] : null;
+                });
+                buildChart('hubWavelengthChart', hubData.labels, wavelengthSeries,
+                           '#a855f7', 'Wavelength', 'nm');
+            }
         }
-         if (hubData.dominantChannel) {
-            const wavelengthSeries = hubData.dominantChannel.map(function(ch) {
-                return CHANNEL_NM[ch] != null ? CHANNEL_NM[ch] : null;
-            });
-            buildChart('hubWavelengthChart', hubData.labels, wavelengthSeries,
-                       '#a855f7', 'Wavelength', 'nm');
-        }
-    }
 
         /* Plant charts */
         Object.keys(plantData).forEach(function(pid) {
             var d = plantData[pid];
-            buildChart('tempChart-'         + pid, d.labels, d.temperature,
+            buildChart('tempChart-'     + pid, d.labels, d.temperature,
                        '#e07a5f', 'Temperature',  '°C');
-            buildChart('moistureChart-'     + pid, d.labels, d.soilMoisture,
+            buildChart('moistureChart-' + pid, d.labels, d.soilMoisture,
                        '#457b9d', 'Soil Moisture', '%');
-            buildChart('batteryChart-'      + pid, d.labels, d.battery,
-                        '#74c69d', 'Battery', '%');
+            buildChart('batteryChart-'  + pid, d.labels, d.battery,
+                       '#74c69d', 'Battery', '%');
         });
     }
 </script>
