@@ -271,6 +271,8 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            width: 100%;
+            min-width: 0;
         }
         .metric-icon {
             width: 32px; height: 32px;
@@ -288,13 +290,15 @@
         .metric-label {
             font-size: 0.8rem;
             color: var(--text-muted);
-            flex: 1;
+            margin-right: auto;
+            white-space: nowrap;
         }
         .metric-value {
             font-size: 0.95rem;
             font-weight: 700;
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
+            flex-shrink: 0;
         }
         .card-footer {
             padding: 12px 20px;
