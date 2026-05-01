@@ -686,6 +686,10 @@
                     <h4><span class="dot" style="background:var(--humidity-color)"></span> Humidity</h4>
                     <div class="chart-wrap"><canvas id="hubHumidityChart"></canvas></div>
                 </div>
+                <div class="chart-card">
+                    <h4><span class="dot" style="background:#a855f7"></span> Dominant Wavelength</h4>
+                    <div class="chart-wrap"><canvas id="hubWavelengthChart"></canvas></div>
+                </div>
             </div>
         </div>
 
@@ -754,6 +758,13 @@
      */
     const plantData = JSON.parse(/*[[${plantDataJson}]]*/  '{}');
     const hubData   = JSON.parse(/*[[${hubDataJson}]]*/    '{}');
+
+    const CHANNEL_NM = {
+    'FZ':   405,  'FY':   425,  'FXL':  450,
+    'VIS1': 475,  'VIS2': 515,  'VIS3': 550,
+    'VIS4': 590,  'VIS5': 630,  'VIS6': 680,
+    'VIS7': 730,  'VIS8': 760,  'NIR':  855
+     };
 
     /* ── View toggle ─────────────────────────────── */
     let chartsBuilt = false;
@@ -850,11 +861,19 @@
     function buildAllCharts() {
         /* Hub charts */
         if (hubData && hubData.labels) {
-            buildChart('hubLightChart',    hubData.labels, hubData.light,
-                       '#f4a261', 'Light', 'lux');
+            buildChart('hubLightChart',    hubData.labels, hubData.lux,
+                        '#f4a261', 'Light', 'lux');
             buildChart('hubHumidityChart', hubData.labels, hubData.humidity,
                        '#2a9d8f', 'Humidity', '%');
         }
+         if (hubData.dominantChannel) {
+            const wavelengthSeries = hubData.dominantChannel.map(function(ch) {
+                return CHANNEL_NM[ch] != null ? CHANNEL_NM[ch] : null;
+            });
+            buildChart('hubWavelengthChart', hubData.labels, wavelengthSeries,
+                       '#a855f7', 'Wavelength', 'nm');
+        }
+    }
 
         /* Plant charts */
         Object.keys(plantData).forEach(function(pid) {
