@@ -47,15 +47,18 @@ public class PlantService {
     // ═══════════════════════════════════════════════════
 
     public List<Plant> saveReadings(Long plantId, List<Plant> readings) {
-        // Resolve the plant's registered name — fall back gracefully if not
-        // yet registered rather than throwing, so ad-hoc readings still land.
-        String name = repo.findTopByPlantIdOrderByTimestampDesc(plantId)
+        String registeredName = repo.findTopByPlantIdOrderByTimestampDesc(plantId)
                 .map(Plant::getName)
-                .orElse("Plant " + plantId);
+                .orElse(null);
 
         for (Plant r : readings) {
             r.setPlantId(plantId);
-            r.setName(name);
+
+            // Prefer the name in the request, then any registered name,
+            // then fall back to a generic label.
+            if (r.getName() == null || r.getName().isBlank()) {
+                r.setName(registeredName != null ? registeredName : "Plant " + plantId);
+            }
 
             if (r.getTimestamp() == null) {
                 r.setTimestamp(LocalDateTime.now());
@@ -82,7 +85,7 @@ public class PlantService {
         List<Plant> latest = new ArrayList<>();
 
         for (Long pid : plantIds) {
-            repo.findTopByPlantIdAndTemperatureIsNotNullOrderByTimestampDesc(pid)
+            repo.findTopByPlantIdOrderByTimestampDesc(pid)
                     .ifPresent(latest::add);
         }
 
@@ -95,7 +98,7 @@ public class PlantService {
      * (not the database row PK).
      */
     public Plant getById(Long plantId) {
-        return repo.findTopByPlantIdAndTemperatureIsNotNullOrderByTimestampDesc(plantId)
+        return repo.findTopByPlantIdOrderByTimestampDesc(plantId)
                 .orElseThrow(() -> new NoSuchElementException(
                         "No plant found with plantId " + plantId));
     }

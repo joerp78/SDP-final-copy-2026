@@ -28,7 +28,7 @@ public class Plant {
     private Double temperature;       // deg C
     private Double soilMoisture;      // %
     private Double soilConductivity;  // uS/cm
-    private Integer battery;          // mV
+    private Double battery;           // mV
 
     @Column(nullable = false)
     private LocalDateTime timestamp;
@@ -44,7 +44,7 @@ public class Plant {
 
     public Plant(Long plantId, String name,
                  Double temperature, Double soilMoisture,
-                 Double soilConductivity, Integer battery,
+                 Double soilConductivity, Double battery,
                  LocalDateTime timestamp) {
         this.plantId          = plantId;
         this.name             = name;
@@ -82,7 +82,7 @@ public class Plant {
             if (soilConductivity > 3.0)      hasCritical = true;
             else if (soilConductivity > 2.0) hasWarning = true;
         }
-        if (battery != null && battery < 3300) {  // below 3.3 V -> warn
+        if (battery != null && battery < 20.0) {  // below 20% → warn
             hasWarning = true;
         }
 
@@ -122,8 +122,8 @@ public class Plant {
     public Double getSoilConductivity()          { return soilConductivity; }
     public void setSoilConductivity(Double v)    { this.soilConductivity = v; }
 
-    public Integer getBattery()                  { return battery; }
-    public void setBattery(Integer battery)      { this.battery = battery; }
+    public Double getBattery()               { return battery; }
+    public void setBattery(Double battery)   { this.battery = battery; }
 
     public LocalDateTime getTimestamp()          { return timestamp; }
     public void setTimestamp(LocalDateTime ts)   { this.timestamp = ts; }

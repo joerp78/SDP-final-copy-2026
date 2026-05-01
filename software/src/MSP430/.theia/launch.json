@@ -38,6 +38,15 @@
                 "name": "WORKING_ALL",
                 "resourceId": "/WORKING_ALL"
             }
+        },
+        {
+            "name": "palm treeessss",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "palm treeessss",
+                "resourceId": "/palm treeessss"
+            }
         }
     ]
 }

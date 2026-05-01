@@ -35,6 +35,7 @@ public record ReadingJson(
         List<Double> temperature,
         List<Double> soilMoisture,
         List<Double> soilConductivity,
+        List<Double> battery,
         List<Double> light,
         List<Double> humidity
 ) {
@@ -54,6 +55,7 @@ public record ReadingJson(
         List<Double> temps          = new ArrayList<>();
         List<Double> moistures      = new ArrayList<>();
         List<Double> conductivities = new ArrayList<>();
+        List<Double> batteries      = new ArrayList<>();
 
         for (Plant r : readings) {
             if (r.getTimestamp() == null) continue;          // skip registration rows
@@ -65,10 +67,12 @@ public record ReadingJson(
             temps.add(r.getTemperature());
             moistures.add(r.getSoilMoisture());
             conductivities.add(r.getSoilConductivity());
+            batteries.add(r.getBattery());
         }
 
         return new ReadingJson(
                 labels, temps, moistures, conductivities,
+                batteries,
                 null,   // light    → omitted from JSON
                 null    // humidity → omitted from JSON
         );
@@ -87,21 +91,13 @@ public record ReadingJson(
             humidities.add(r.getHumidity());
         }
 
-        return new ReadingJson(
-                labels,
-                null,   // temperature      → omitted
-                null,   // soilMoisture     → omitted
-                null,   // soilConductivity → omitted
-                lights,
-                humidities
-        );
+        return new ReadingJson(labels, null, null, null, null, lights, humidities);
+
     }
 
     // ── Empty instance for when there's no data ─────────
 
     public static ReadingJson empty() {
-        return new ReadingJson(
-                List.of(), null, null, null, null, null
-        );
+        return new ReadingJson(List.of(), null, null, null, null, null, null);
     }
 }

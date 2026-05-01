@@ -4,7 +4,7 @@
 
 SHELL = cmd.exe
 
-CG_TOOL_ROOT := C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS
+CG_TOOL_ROOT := C:/ti/ccs2041/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS
 
 GEN_OPTS__FLAG := 
 GEN_CMDS__FLAG := 
@@ -130,8 +130,9 @@ all: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 
 # Tool invocations
 pcb-code\ copy.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
-	@echo 'MSP430 Linker - building target: "$@"'
-	"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/bin/cl430" -vmspx -O3 --use_hw_mpy=F5 --advice:power="none" --advice:hw_config=all --define=__MSP430FR2355__ --define=_FRWP_ENABLE --define=_INFO_FRWP_ENABLE --define=__ENABLE_GUI_COMM=1 --define=GLOBAL_Q=8 -g --printf_support=minimal --diag_warning=225 --diag_wrap=off --display_error_number --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU40 -z -m"pcb-code copy.map" --heap_size=160 --stack_size=160 --cinit_hold_wdt=on -i"C:/ti/ccs2050/ccs/ccs_base/msp430/include" -i"C:/ti/ccs2050/ccs/ccs_base/msp430/lib/FR2xx" -i"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/lib" -i"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include" --priority --reread_libs --define=_FRWP_ENABLE --define=_INFO_FRWP_ENABLE --diag_wrap=off --display_error_number --warn_sections --xml_link_info="pcb-code copy_linkInfo.xml" --use_hw_mpy=F5 --rom_model -o "pcb-code copy.out" $(ORDERED_OBJS)
+	@echo 'Building target: "$@"'
+	@echo 'Invoking: MSP430 Linker'
+	"C:/ti/ccs2041/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/bin/cl430" -vmspx -O3 --use_hw_mpy=F5 --advice:power="none" --advice:hw_config=all --define=__MSP430FR2355__ --define=_FRWP_ENABLE --define=_INFO_FRWP_ENABLE --define=__ENABLE_GUI_COMM=1 --define=GLOBAL_Q=8 -g --printf_support=minimal --diag_warning=225 --diag_wrap=off --display_error_number --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU40 -z -m"pcb-code copy.map" --heap_size=160 --stack_size=160 --cinit_hold_wdt=on -i"C:/ti/ccs2041/ccs/ccs_base/msp430/include" -i"C:/ti/ccs2041/ccs/ccs_base/msp430/lib/FR2xx" -i"C:/ti/ccs2041/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/lib" -i"C:/ti/ccs2041/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include" --priority --reread_libs --define=_FRWP_ENABLE --define=_INFO_FRWP_ENABLE --diag_wrap=off --display_error_number --warn_sections --xml_link_info="pcb-code copy_linkInfo.xml" --use_hw_mpy=F5 --rom_model -o "pcb-code copy.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: "$@"'
 	@echo ' '
 
@@ -140,6 +141,7 @@ clean:
 	-$(RM) $(EXE_OUTPUTS__QUOTED)
 	-$(RM) "main.obj" "src\em4325_spi.obj" 
 	-$(RM) "main.d" "src\em4325_spi.d" 
+	-@echo 'Finished clean'
 	-@echo ' '
 
 .PHONY: all clean dependents

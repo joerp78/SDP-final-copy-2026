@@ -16,7 +16,6 @@
         --text: #1b4332;    --text-secondary: #52796f;
         --text-muted: #8faba1; --border: #d8e4dd;
         --temp: #e07a5f;    --moisture: #457b9d;
-        --conductivity: #e9c46a;
         --healthy: #40916c; --warning: #e9a820; --critical: #d64045;
         --shadow: 0 2px 12px rgba(27,67,50,0.08);
         --shadow-lg: 0 8px 30px rgba(27,67,50,0.12);
@@ -80,16 +79,16 @@
     }
     .metric-card.temp         { border-top-color: var(--temp); }
     .metric-card.moisture     { border-top-color: var(--moisture); }
-    .metric-card.conductivity { border-top-color: var(--conductivity); }
     .mc-icon {
         width: 48px; height: 48px; border-radius: 14px;
         display: flex; align-items: center; justify-content: center;
         flex-shrink: 0;
     }
+    .metric-card.battery     { border-top-color: var(--battery); }
     .mc-icon svg { width: 22px; height: 22px; }
     .mc-icon.temp         { background: #fce8e2; color: var(--temp); }
     .mc-icon.moisture     { background: #dfeef7; color: var(--moisture); }
-    .mc-icon.conductivity { background: #fdf5e0; color: var(--conductivity); }
+    .mc-icon.battery         { background: #d8f3dc; color: var(--battery); }
     .mc-info .mc-value {
         font-size: 2rem; font-weight: 800; line-height: 1.2;
     }
@@ -169,18 +168,18 @@
         <div class="mc-label">Soil Moisture</div>
       </div>
     </div>
-    <div class="metric-card conductivity">
-      <div class="mc-icon conductivity">
+    <div class="metric-card battery">
+      <div class="mc-icon battery">
         <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          <path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/>
         </svg>
       </div>
       <div class="mc-info">
         <div class="mc-value"
-             th:text="${plant.soilConductivity != null
-                               ? #numbers.formatDecimal(plant.soilConductivity,1,2) + ' %'
-                               : '—'}">1.20 %</div>
-        <div class="mc-label">Soil Conductivity</div>
+             th:text="${plant.battery != null
+                         ? #numbers.formatDecimal(plant.battery,1,1) + '%'
+                         : '—'}">85.0%</div>
+        <div class="mc-label">Battery</div>
       </div>
     </div>
   </section>
@@ -197,10 +196,9 @@
     <div class="chart-full"><canvas id="moistureChart"></canvas></div>
   </section>
 
-  <!-- ─── Conductivity Chart ─── -->
   <section class="chart-section">
-    <h3><span class="dot" style="background:#e9c46a"></span> Soil Conductivity Over Time</h3>
-    <div class="chart-full"><canvas id="conductivityChart"></canvas></div>
+    <h3><span class="dot" style="background:#74c69d"></span> Battery Over Time</h3>
+    <div class="chart-full"><canvas id="batteryChart"></canvas></div>
   </section>
 
 </main>
@@ -211,8 +209,7 @@
    * {
    *   "labels":           ["Mon 08:00","Mon 08:05", ...],
    *   "temperature":      [22.5, 23.0, ...],
-   *   "soilMoisture":     [45.0, 46.2, ...],
-   *   "soilConductivity": [1.20, 1.31, ...]
+   *   "soilMoisture":     [45.0, 46.2, ...]
    * }
    */
   const readings = JSON.parse(/*[[${readingsJson}]]*/ '{}');
@@ -263,8 +260,8 @@
                  '#e07a5f', 'Temperature',  '°C');
       buildChart('moistureChart',     readings.labels, readings.soilMoisture,
                  '#457b9d', 'Soil Moisture', '%');
-      buildChart('conductivityChart', readings.labels, readings.soilConductivity,
-                 '#e9c46a', 'Conductivity',  '%');
+      buildChart('batteryChart',      readings.labels, readings.battery,
+                  '#74c69d', 'Battery',        '%');
   }
 </script>
 </body>
