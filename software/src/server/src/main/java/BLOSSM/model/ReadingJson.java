@@ -60,7 +60,7 @@ public class ReadingJson {
         return out;
     }
 
-    public static ReadingJson fromPlant(List<Plant> readings) {
+    public static ReadingJson fromPlants(List<Plant> readings) {
         ReadingJson out = new ReadingJson();
         for (Plant p : readings) {
             out.labels.add(formatLabel(p.getTimestamp()));
