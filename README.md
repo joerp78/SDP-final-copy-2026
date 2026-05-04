@@ -26,9 +26,9 @@ The system uses **UHF backscatter communication (~900 MHz)** to transmit soil te
 ## 🔌 /hardware
 - PCB schematics & layouts  
 - Gerbers and BOM  
-- 900 MHz PCB monopole antenna  
+- 900 MHz PCB dipole antenna  
 - Sensor interface & power management  
-- Backscatter load modulation network  
+- Backscatter Communication 
 
 ---
 
